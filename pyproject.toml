@@ -1,0 +1,9 @@
+[project]
+name = "mad_prefect"
+version = "1.0.0"
+authors = [
+  { name="MAIT DEV Pty Ltd", email="maitland@mait.dev" },
+]
+description = "A shared MAD Prefect project."
+readme = "README.md"
+requires-python = ">=3.11"
