@@ -78,15 +78,17 @@ def get_file_system():
 
 
 @task
-def write_to_file_system(path: str, data):
+def write_to_file_system(path: str, data, **kwargs):
     if isinstance(data, dict):
         # if path has variables, substitute them for the values inside data
         # but only if the data is a simple dict
-        path = path.format(**data)
+        path = path.format(**{**kwargs, **data})
+    elif isinstance(data, list):
+        path = path.format(**{**kwargs, "data": data})
 
     # serialize the data as json
     fs = get_file_system()
-    js = JSONSerializer()
+    js = JSONSerializer(dumps_kwargs={"indent": 4})
     data = js.dumps(data)
 
     # write to the fs
