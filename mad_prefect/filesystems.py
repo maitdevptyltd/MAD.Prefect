@@ -1,0 +1,102 @@
+import os
+from prefect import task
+import prefect.filesystems
+import prefect.utilities.asyncutils
+import fsspec
+import fsspec.utils
+from prefect.serializers import JSONSerializer
+
+FILE_SYSTEM_URL = os.getenv("FILE_SYSTEM_URL")
+
+
+class FsspecFileSystem(
+    prefect.filesystems.WritableFileSystem,
+    prefect.filesystems.WritableDeploymentStorage,
+):
+    _block_type_name = "Fsspec Advanced FileSystem"
+
+    def __init__(self, basepath: str):
+        self.basepath = basepath
+        fs, fs_url = fsspec.core.url_to_fs(basepath)
+
+        self._fs: fsspec.AbstractFileSystem = fs
+        self._fs_url: str = fs_url
+
+    def _resolve_path(self, path: str):
+        # resolve the path relative to the basepath as supplied by fsspec
+        return f"{self._fs_url}/{path.lstrip('/')}"
+
+    @prefect.utilities.asyncutils.sync_compatible
+    async def read_path(self, path: str) -> bytes:
+        path = self._resolve_path(path)
+
+        # Check if the path exists
+        if not self._fs.exists(path):
+            raise ValueError(f"Path {path} does not exist.")
+
+        # Validate that its a file
+        if self._fs.info(path)["type"] != "file":
+            raise ValueError(f"Path {path} is not a file.")
+
+        self._fs.mkdirs(self._fs._parent(path), exist_ok=True)
+        file = self._fs.read_bytes(path)
+
+        return file
+
+    @prefect.utilities.asyncutils.sync_compatible
+    async def write_path(self, path: str, content: bytes) -> None:
+        resolved_path = self._resolve_path(path)
+
+        self._fs.mkdirs(self._fs._parent(resolved_path), exist_ok=True)
+        self._fs.write_bytes(resolved_path, content)
+
+        return path
+
+    @prefect.utilities.asyncutils.sync_compatible
+    async def move_path(self, path: str, dest: str) -> str:
+        pass
+
+    @prefect.utilities.asyncutils.sync_compatible
+    async def delete_path(self, path: str) -> None:
+        pass
+
+    @prefect.utilities.asyncutils.sync_compatible
+    async def get_directory(
+        self, from_path: str = None, local_path: str = None
+    ) -> None:
+        pass
+
+    @prefect.utilities.asyncutils.sync_compatible
+    async def put_directory(
+        self, local_path: str = None, to_path: str = None, ignore_file: str = None
+    ) -> None:
+        pass
+
+
+def get_file_system():
+    return FsspecFileSystem(basepath=FILE_SYSTEM_URL)
+
+
+@task
+def write_to_file_system(path: str, data):
+    if isinstance(data, dict):
+        # if path has variables, substitute them for the values inside data
+        # but only if the data is a simple dict
+        path = path.format(**data)
+
+    # serialize the data as json
+    fs = get_file_system()
+    js = JSONSerializer()
+    data = js.dumps(data)
+
+    # write to the fs
+    return fs.write_path(path, data)
+
+
+@task
+def read_from_file_system(path: str):
+    fs = get_file_system()
+    js = JSONSerializer()
+    data = fs.read_path(path)
+    data = js.loads(data)
+    return data
