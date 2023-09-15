@@ -7,3 +7,7 @@ authors = [
 description = "A shared MAD Prefect project."
 readme = "README.md"
 requires-python = ">=3.11"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
