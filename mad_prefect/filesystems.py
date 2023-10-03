@@ -6,7 +6,7 @@ import fsspec
 import fsspec.utils
 from prefect.serializers import JSONSerializer
 
-FILE_SYSTEM_URL = os.getenv("FILE_SYSTEM_URL")
+FILESYSTEM_URL = os.getenv("FILESYSTEM_URL", "file://./.tmp/storage")
 
 
 class FsspecFileSystem(
@@ -74,7 +74,7 @@ class FsspecFileSystem(
 
 
 def get_file_system():
-    return FsspecFileSystem(basepath=FILE_SYSTEM_URL)
+    return FsspecFileSystem(basepath=FILESYSTEM_URL)
 
 
 @task
