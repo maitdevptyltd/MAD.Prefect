@@ -1,13 +1,15 @@
-[project]
-name = "mad_prefect"
-version = "1.0.3"
-authors = [
-  { name="MAIT DEV Pty Ltd", email="maitland@mait.dev" },
-]
-description = "A shared MAD Prefect project."
+[tool.poetry]
+name = "mad-prefect"
+version = "0.1.0"
+description = ""
+authors = ["Maitland Marshall <maitland@mait.dev>"]
 readme = "README.md"
-requires-python = ">=3.11"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+prefect = "^2.13.4"
+
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
