@@ -73,12 +73,12 @@ class FsspecFileSystem(
         pass
 
 
-def get_file_system():
+def get_filesystem():
     return FsspecFileSystem(basepath=FILESYSTEM_URL)
 
 
 @task
-def write_to_file_system(path: str, data, **kwargs):
+def write_to_filesystem(path: str, data, **kwargs):
     if isinstance(data, dict):
         # if path has variables, substitute them for the values inside data
         # but only if the data is a simple dict
@@ -87,7 +87,7 @@ def write_to_file_system(path: str, data, **kwargs):
         path = path.format(**{**kwargs, "data": data})
 
     # serialize the data as json
-    fs = get_file_system()
+    fs = get_filesystem()
     js = JSONSerializer(dumps_kwargs={"indent": 4})
     data = js.dumps(data)
 
@@ -96,8 +96,8 @@ def write_to_file_system(path: str, data, **kwargs):
 
 
 @task
-def read_from_file_system(path: str):
-    fs = get_file_system()
+def read_from_filesystem(path: str):
+    fs = get_filesystem()
     js = JSONSerializer()
     data = fs.read_path(path)
     data = js.loads(data)
