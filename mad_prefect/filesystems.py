@@ -1,4 +1,6 @@
+import io
 import os
+from pandas import DataFrame
 from prefect import task
 import prefect.filesystems
 import prefect.utilities.asyncutils
@@ -86,10 +88,19 @@ def write_to_filesystem(path: str, data, **kwargs):
     elif isinstance(data, list):
         path = path.format(**{**kwargs, "data": data})
 
-    # serialize the data as json
+    # serialize the data and write to fs
     fs = get_filesystem()
-    js = JSONSerializer(dumps_kwargs={"indent": 4})
-    data = js.dumps(data)
+
+    # infer the serialization type from the path
+    if path.lower().endswith(".parquet"):
+        buf = io.BytesIO()
+        DataFrame(data).to_parquet(buf)
+        buf.seek(0)
+        data = buf
+    # otherwise just write using json as default
+    else:
+        js = JSONSerializer(dumps_kwargs={"indent": 4})
+        data = js.dumps(data)
 
     # write to the fs
     return fs.write_path(path, data)

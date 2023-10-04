@@ -6,8 +6,9 @@ authors = ["Maitland Marshall <maitland@mait.dev>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.12"
 prefect = "^2.13.4"
+pandas = "^2.1.1"
 
 
 [build-system]
