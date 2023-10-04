@@ -96,7 +96,7 @@ def write_to_filesystem(path: str, data, **kwargs):
         buf = io.BytesIO()
         DataFrame(data).to_parquet(buf)
         buf.seek(0)
-        data = buf
+        data = buf.getvalue()
     # otherwise just write using json as default
     else:
         js = JSONSerializer(dumps_kwargs={"indent": 4})
