@@ -80,16 +80,18 @@ def get_filesystem():
 
 
 @task
-def write_to_filesystem(path: str, data, **kwargs):
+def write_to_filesystem(
+    path: str,
+    data: list | dict | any,
+    fs: FsspecFileSystem = get_filesystem(),
+    **kwargs,
+):
     if isinstance(data, dict):
         # if path has variables, substitute them for the values inside data
         # but only if the data is a simple dict
         path = path.format(**{**kwargs, **data})
     elif isinstance(data, list):
         path = path.format(**{**kwargs, "data": data})
-
-    # serialize the data and write to fs
-    fs = get_filesystem()
 
     # infer the serialization type from the path
     if path.lower().endswith(".parquet"):
@@ -107,8 +109,7 @@ def write_to_filesystem(path: str, data, **kwargs):
 
 
 @task
-def read_from_filesystem(path: str):
-    fs = get_filesystem()
+def read_from_filesystem(path: str, fs: FsspecFileSystem = get_filesystem()):
     js = JSONSerializer()
     data = fs.read_path(path)
     data = js.loads(data)
