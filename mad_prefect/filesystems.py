@@ -57,7 +57,20 @@ class FsspecFileSystem(
 
     @prefect.utilities.asyncutils.sync_compatible
     async def move_path(self, path: str, dest: str) -> str:
-        pass
+        source_path = self._resolve_path(path)
+        destination_path = self._resolve_path(dest)
+
+        # Ensure source path exists
+        if not self._fs.exists(source_path):
+            raise ValueError(f"Source path {source_path} does not exist.")
+
+        # Ensure destination's parent directory exists
+        self._fs.mkdirs(self._fs._parent(destination_path), exist_ok=True)
+
+        # Move the file
+        self._fs.move(source_path, destination_path)
+
+        return destination_path
 
     @prefect.utilities.asyncutils.sync_compatible
     async def delete_path(self, path: str) -> None:
