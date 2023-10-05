@@ -1,7 +1,7 @@
 import io
 import os
 from typing import Any
-from pandas import DataFrame
+from pandas import DataFrame, read_parquet
 from prefect import task
 import prefect.filesystems
 import prefect.utilities.asyncutils
@@ -127,9 +127,17 @@ def create_write_to_filesystem_task(fs: FsspecFileSystem):
 def create_read_from_filesystem_task(fs: FsspecFileSystem):
     @task
     def read_from_filesystem(path: str):
-        js = JSONSerializer()
         data = fs.read_path(path)
-        data = js.loads(data)
+
+        # infer the deserialization type from the path
+        if path.lower().endswith(".parquet"):
+            buf = io.BytesIO(data)
+            data = read_parquet(buf).to_dict(orient="records")
+        # otherwise assume json as default
+        else:
+            js = JSONSerializer()
+            data = js.loads(data)
+
         return data
 
     return read_from_filesystem
