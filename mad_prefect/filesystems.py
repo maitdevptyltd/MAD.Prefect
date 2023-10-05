@@ -1,5 +1,6 @@
 import io
 import os
+from typing import Any
 from pandas import DataFrame
 from prefect import task
 import prefect.filesystems
@@ -83,7 +84,7 @@ def create_write_to_filesystem_task(fs: FsspecFileSystem):
     @task
     def write_to_filesystem(
         path: str,
-        data: list | dict | any,
+        data: list | dict | Any,
         **kwargs,
     ):
         if isinstance(data, dict):
@@ -112,7 +113,7 @@ def create_write_to_filesystem_task(fs: FsspecFileSystem):
 
 def create_read_from_filesystem_task(fs: FsspecFileSystem):
     @task
-    def read_from_filesystem(path: str, fs: FsspecFileSystem = get_filesystem()):
+    def read_from_filesystem(path: str):
         js = JSONSerializer()
         data = fs.read_path(path)
         data = js.loads(data)
