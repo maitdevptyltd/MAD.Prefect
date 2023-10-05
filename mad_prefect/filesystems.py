@@ -1,5 +1,6 @@
 import io
 import os
+from typing import Any
 from pandas import DataFrame
 from prefect import task
 import prefect.filesystems
@@ -82,7 +83,7 @@ def get_filesystem():
 @task
 def write_to_filesystem(
     path: str,
-    data: list | dict | any,
+    data: list | dict | Any,
     fs: FsspecFileSystem = get_filesystem(),
     **kwargs,
 ):
