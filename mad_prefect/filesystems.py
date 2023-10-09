@@ -20,7 +20,7 @@ class FsspecFileSystem(
     _block_type_name = "Fsspec Advanced FileSystem"
 
     basepath: str
-    kwargs: SecretDict[str, Any] = {}
+    kwargs: SecretDict = {}
 
     def __init__(self, basepath: str, **kwargs):
         self.basepath = basepath
