@@ -8,6 +8,7 @@ import prefect.utilities.asyncutils
 import fsspec
 import fsspec.utils
 from prefect.serializers import JSONSerializer
+from prefect.blocks.fields import SecretDict
 
 FILESYSTEM_URL = os.getenv("FILESYSTEM_URL", "file://./.tmp/storage")
 
@@ -17,6 +18,9 @@ class FsspecFileSystem(
     prefect.filesystems.WritableDeploymentStorage,
 ):
     _block_type_name = "Fsspec Advanced FileSystem"
+
+    basepath: str
+    kwargs: SecretDict[str, Any] = {}
 
     def __init__(self, basepath: str, **kwargs):
         self.basepath = basepath
