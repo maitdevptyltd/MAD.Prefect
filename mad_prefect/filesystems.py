@@ -18,9 +18,9 @@ class FsspecFileSystem(
 ):
     _block_type_name = "Fsspec Advanced FileSystem"
 
-    def __init__(self, basepath: str):
+    def __init__(self, basepath: str, **kwargs):
         self.basepath = basepath
-        fs, fs_url = fsspec.core.url_to_fs(basepath)
+        fs, fs_url = fsspec.core.url_to_fs(basepath, **kwargs)
 
         self._fs: fsspec.AbstractFileSystem = fs
         self._fs_url: str = fs_url
