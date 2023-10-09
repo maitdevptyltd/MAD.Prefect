@@ -20,6 +20,8 @@ class FsspecFileSystem(
 
     def __init__(self, basepath: str, **kwargs):
         self.basepath = basepath
+        self.kwargs = kwargs
+
         fs, fs_url = fsspec.core.url_to_fs(basepath, **kwargs)
 
         self._fs: fsspec.AbstractFileSystem = fs
