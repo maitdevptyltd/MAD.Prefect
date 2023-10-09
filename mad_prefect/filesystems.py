@@ -20,13 +20,13 @@ class FsspecFileSystem(
     _block_type_name = "Fsspec Advanced FileSystem"
 
     basepath: str
-    kwargs: SecretDict = {}
+    storage_options: SecretDict = {}
 
-    def __init__(self, basepath: str, **kwargs):
+    def __init__(self, basepath: str, storage_options=None, **kwargs):
         self.basepath = basepath
-        self.kwargs = kwargs
+        self.storage_options = storage_options or kwargs
 
-        fs, fs_url = fsspec.core.url_to_fs(basepath, **kwargs)
+        fs, fs_url = fsspec.core.url_to_fs(basepath, **self.storage_options)
 
         self._fs: fsspec.AbstractFileSystem = fs
         self._fs_url: str = fs_url
