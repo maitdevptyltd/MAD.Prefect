@@ -33,7 +33,7 @@ class FsspecFileSystem(
 
     def _resolve_path(self, path: str):
         # resolve the path relative to the basepath as supplied by fsspec
-        return f"{self._fs_url}/{path.lstrip('/')}"
+        return f"{self._fs_url.rstrip('/')}/{path.lstrip('/')}"
 
     @prefect.utilities.asyncutils.sync_compatible
     async def read_path(self, path: str) -> bytes:
