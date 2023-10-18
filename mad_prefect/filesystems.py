@@ -122,7 +122,11 @@ def create_write_to_filesystem_task(fs: FsspecFileSystem):
             data = buf.getvalue()
         # otherwise just write using json as default
         else:
-            js = JSONSerializer(dumps_kwargs={"indent": 4 if indent else False})
+            js = (
+                JSONSerializer(dumps_kwargs={"indent": 4})
+                if indent
+                else JSONSerializer()
+            )
             data = js.dumps(data)
 
         # write to the fs
