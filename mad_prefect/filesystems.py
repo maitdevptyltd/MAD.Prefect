@@ -104,6 +104,7 @@ def create_write_to_filesystem_task(fs: FsspecFileSystem):
     def write_to_filesystem(
         path: str,
         data: list | dict | Any,
+        indent: bool = True,
         **kwargs,
     ):
         if isinstance(data, dict):
@@ -121,7 +122,7 @@ def create_write_to_filesystem_task(fs: FsspecFileSystem):
             data = buf.getvalue()
         # otherwise just write using json as default
         else:
-            js = JSONSerializer(dumps_kwargs={"indent": 4})
+            js = JSONSerializer(dumps_kwargs={"indent": 4 if indent else False})
             data = js.dumps(data)
 
         # write to the fs
