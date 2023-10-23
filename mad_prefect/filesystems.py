@@ -96,11 +96,12 @@ class FsspecFileSystem(
         pass
 
 
-def get_filesystem():
+@prefect.utilities.asyncutils.sync_compatible
+async def get_filesystem():
     result: FsspecFileSystem
 
     if FILESYSTEM_BLOCK_NAME:
-        result = FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME)
+        result = await FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME)
     else:
         result = FsspecFileSystem(basepath=FILESYSTEM_URL)
 
