@@ -109,12 +109,11 @@ class FsspecFileSystem(
         return self._fs.open(resolved_path, mode=mode)
 
 
-@prefect.utilities.asyncutils.sync_compatible
-async def get_filesystem():
+def get_filesystem():
     result: FsspecFileSystem
 
     if FILESYSTEM_BLOCK_NAME:
-        result = await FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME)
+        result = FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME)
     else:
         result = FsspecFileSystem(basepath=FILESYSTEM_URL)
 
