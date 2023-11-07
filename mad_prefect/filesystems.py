@@ -95,6 +95,19 @@ class FsspecFileSystem(
     ) -> None:
         pass
 
+    @prefect.utilities.asyncutils.sync_compatible
+    async def open(self, path: str, mode: str = "rb"):
+        resolved_path = self._resolve_path(path)
+
+        # Check if the path exists and is a file
+        if not self._fs.exists(resolved_path):
+            raise ValueError(f"Path {resolved_path} does not exist.")
+        if self._fs.info(resolved_path)["type"] != "file":
+            raise ValueError(f"Path {resolved_path} is not a file.")
+
+        # Open the file and read the contents
+        return self._fs.open(resolved_path, mode=mode)
+
 
 @prefect.utilities.asyncutils.sync_compatible
 async def get_filesystem():
