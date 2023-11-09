@@ -169,6 +169,18 @@ def get_filesystem():
     return result
 
 
+@prefect.utilities.asyncutils.sync_compatible
+async def get_fs():
+    result: FsspecFileSystem
+
+    if FILESYSTEM_BLOCK_NAME:
+        result = await FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME)
+    else:
+        result = FsspecFileSystem(basepath=FILESYSTEM_URL)
+
+    return result
+
+
 def create_write_to_filesystem_task(fs: FsspecFileSystem):
     @task
     def write_to_filesystem(
