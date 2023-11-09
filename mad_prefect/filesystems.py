@@ -96,6 +96,55 @@ class FsspecFileSystem(
         pass
 
     @prefect.utilities.asyncutils.sync_compatible
+    async def write_data(
+        self,
+        path: str,
+        data: list | dict | Any,
+        indent: bool = True,
+        **kwargs,
+    ):
+        if isinstance(data, dict):
+            # if path has variables, substitute them for the values inside data
+            # but only if the data is a simple dict
+            path = path.format(**{**kwargs, **data})
+        elif isinstance(data, list):
+            path = path.format(**{**kwargs, "data": data})
+
+        # infer the serialization type from the path
+        if path.lower().endswith(".parquet"):
+            buf = io.BytesIO()
+            DataFrame(data).to_parquet(buf)
+            buf.seek(0)
+            data = buf.getvalue()
+
+        # otherwise just write using json as default
+        else:
+            js = (
+                JSONSerializer(dumps_kwargs={"indent": 4})
+                if indent
+                else JSONSerializer()
+            )
+            data = js.dumps(data)
+
+        # write to the fs
+        return await self.write_path(path, data)
+
+    @prefect.utilities.asyncutils.sync_compatible
+    async def read_data(self, path: str):
+        data = await self.read_path(path)
+
+        # infer the deserialization type from the path
+        if path.lower().endswith(".parquet"):
+            buf = io.BytesIO(data)
+            data = read_parquet(buf).to_dict(orient="records")
+        # otherwise assume json as default
+        else:
+            js = JSONSerializer()
+            data = js.loads(data)
+
+        return data
+
+    @prefect.utilities.asyncutils.sync_compatible
     async def open(self, path: str, mode: str = "rb"):
         resolved_path = self._resolve_path(path)
 
