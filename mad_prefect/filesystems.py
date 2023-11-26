@@ -145,14 +145,18 @@ class FsspecFileSystem(
         return data
 
     @prefect.utilities.asyncutils.sync_compatible
-    async def open(self, path: str, mode: str = "rb"):
+    async def open(self, path: str, mode: str = "rb", auto_mkdir: bool = False):
         resolved_path = self._resolve_path(path)
 
-        # Check if the path exists and is a file
-        if not self._fs.exists(resolved_path):
-            raise ValueError(f"Path {resolved_path} does not exist.")
-        if self._fs.info(resolved_path)["type"] != "file":
-            raise ValueError(f"Path {resolved_path} is not a file.")
+        if "w" in mode:
+            if auto_mkdir:
+                self._fs.mkdirs(self._fs._parent(resolved_path), exist_ok=True)
+        else:
+            # Check if the path exists and is a file
+            if not self._fs.exists(resolved_path):
+                raise ValueError(f"Path {resolved_path} does not exist.")
+            if self._fs.info(resolved_path)["type"] != "file":
+                raise ValueError(f"Path {resolved_path} is not a file.")
 
         # Open the file and read the contents
         return self._fs.open(resolved_path, mode=mode)
