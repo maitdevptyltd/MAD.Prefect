@@ -9,6 +9,7 @@ import fsspec.utils
 from prefect.serializers import JSONSerializer
 from prefect.blocks.fields import SecretDict
 import sshfs
+import tempfile
 
 fsspec.register_implementation("ssh", sshfs.SSHFileSystem)
 fsspec.register_implementation("sftp", sshfs.SSHFileSystem)
@@ -57,11 +58,19 @@ class FsspecFileSystem(
         return file
 
     @prefect.utilities.asyncutils.sync_compatible
-    async def write_path(self, path: str, content: bytes) -> None:
+    async def write_path(self, path: str, content: bytes):
         resolved_path = self._resolve_path(path)
 
+        # Ensure the directory is created
         self._fs.mkdirs(self._fs._parent(resolved_path), exist_ok=True)
-        self._fs.write_bytes(resolved_path, content)
+
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile() as temp_file:
+            temp_file.write(content)
+            temp_file.flush()
+
+            # Upload the temporary file to the destination path
+            self._fs.put(temp_file.name, resolved_path)
 
         return path
 
