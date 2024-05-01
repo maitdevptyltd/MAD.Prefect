@@ -65,12 +65,19 @@ class FsspecFileSystem(
         self._fs.mkdirs(self._fs._parent(resolved_path), exist_ok=True)
 
         # Create a temporary file
-        with tempfile.NamedTemporaryFile() as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             temp_file.write(content)
             temp_file.flush()
 
-            # Upload the temporary file to the destination path
-            self._fs.put(temp_file.name, resolved_path)
+            # Remember the temporary file name to delete it later
+            temp_path = temp_file.name
+
+        # Upload the temporary file to the destination path
+        try:
+            self._fs.put(temp_path, resolved_path)
+        finally:
+            # Ensure the temporary file is deleted
+            os.remove(temp_path)
 
         return path
 
