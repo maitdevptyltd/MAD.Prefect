@@ -1,6 +1,6 @@
 import io
 import os
-from typing import Any
+from typing import Any, cast
 from pandas import DataFrame, read_parquet
 import prefect.filesystems
 import prefect.utilities.asyncutils
@@ -55,7 +55,7 @@ class FsspecFileSystem(
         self._fs.mkdirs(self._fs._parent(path), exist_ok=True)
         file = self._fs.read_bytes(path)
 
-        return file
+        return cast(bytes, file)
 
     @prefect.utilities.asyncutils.sync_compatible
     async def write_path(self, path: str, content: bytes):
@@ -93,19 +93,22 @@ class FsspecFileSystem(
 
     @prefect.utilities.asyncutils.sync_compatible
     async def delete_path(self, path: str) -> None:
-        pass
+        raise NotImplementedError()
 
     @prefect.utilities.asyncutils.sync_compatible
     async def get_directory(
-        self, from_path: str = None, local_path: str = None
+        self, from_path: str | None = None, local_path: str | None = None
     ) -> None:
-        pass
+        raise NotImplementedError()
 
     @prefect.utilities.asyncutils.sync_compatible
     async def put_directory(
-        self, local_path: str = None, to_path: str = None, ignore_file: str = None
+        self,
+        local_path: str | None = None,
+        to_path: str | None = None,
+        ignore_file: str | None = None,
     ) -> None:
-        pass
+        raise NotImplementedError()
 
     @prefect.utilities.asyncutils.sync_compatible
     async def write_data(
