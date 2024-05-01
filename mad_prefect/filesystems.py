@@ -8,6 +8,10 @@ import fsspec
 import fsspec.utils
 from prefect.serializers import JSONSerializer
 from prefect.blocks.fields import SecretDict
+import sshfs
+
+fsspec.register_implementation("ssh", sshfs.SSHFileSystem)
+fsspec.register_implementation("sftp", sshfs.SSHFileSystem)
 
 FILESYSTEM_URL = os.getenv("FILESYSTEM_URL", "file://./.tmp/storage")
 FILESYSTEM_BLOCK_NAME = os.getenv("FILESYSTEM_BLOCK_NAME")
