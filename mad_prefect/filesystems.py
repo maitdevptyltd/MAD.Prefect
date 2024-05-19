@@ -1,7 +1,8 @@
 import io
+from io import StringIO
 import os
 from typing import Any, cast
-from pandas import DataFrame, read_parquet
+from pandas import DataFrame, read_parquet, read_csv
 import prefect.filesystems
 import prefect.utilities.asyncutils
 import fsspec
@@ -39,6 +40,12 @@ class FsspecFileSystem(
     def _resolve_path(self, path: str):
         # resolve the path relative to the basepath as supplied by fsspec
         return f"{self._fs_url.rstrip('/')}/{path.lstrip('/')}"
+
+    def glob(self, path: str):
+        # return relative paths to the basepath
+        abs_paths = self._fs.glob(self._resolve_path(path))
+
+        return [abs_path.replace(f"{self._fs_url}/", "") for abs_path in abs_paths]
 
     @prefect.utilities.asyncutils.sync_compatible
     async def read_path(self, path: str) -> bytes:
@@ -133,11 +140,17 @@ class FsspecFileSystem(
             path = path.format(**{**kwargs, "data": data})
 
         # infer the serialization type from the path
+
         if path.lower().endswith(".parquet"):
             buf = io.BytesIO()
             DataFrame(data).to_parquet(buf)
             buf.seek(0)
             data = buf.getvalue()
+
+        elif path.lower().endswith(".csv"):
+            buf = StringIO()
+            DataFrame(data).to_csv(buf, encoding="utf-8", sep=",")
+            data = buf.getvalue().encode("utf-8")
 
         # otherwise just write using json as default
         else:
@@ -152,13 +165,21 @@ class FsspecFileSystem(
         return await self.write_path(path, data)
 
     @prefect.utilities.asyncutils.sync_compatible
-    async def read_data(self, path: str):
+    async def read_data(self, path: str, encoding: str = "utf-8"):
         data = await self.read_path(path)
 
         # infer the deserialization type from the path
         if path.lower().endswith(".parquet"):
             buf = io.BytesIO(data)
             data = read_parquet(buf).to_dict(orient="records")
+
+        elif path.lower().endswith(".csv"):
+            # Decode bytes to string using UTF-8
+            file_str = data.decode(encoding)
+            buf = StringIO(file_str)
+            # Parse the string as CSV
+            data = read_csv(buf, sep=",").to_dict(orient="records")
+
         # otherwise assume json as default
         else:
             js = JSONSerializer()
