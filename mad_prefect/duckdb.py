@@ -16,17 +16,20 @@ class MadFileSystem(fsspec.AbstractFileSystem):
 
         super().__init__(**options)
 
-    def glob(self, path: str, maxdepth: int | None = None, **kwargs):
-        return self._fs.glob(self.fix_path(path), maxdepth, **kwargs)
+    def glob(self, path: str, **kwargs):
+        return self._fs.glob(self.fix_path(path), **kwargs)
 
     def info(self, path: str, **kwargs):
         return self._fs.info(self.fix_path(path), **kwargs)
 
-    def _open(self, path: str, mode: str = "rb", **kwargs):
-        return self._fs._open(self.fix_path(path), mode, **kwargs)
+    def _open(self, path: str, **kwargs):
+        return self._fs._open(self.fix_path(path), **kwargs)
 
-    def _rm(self, path):
-        return self._fs._rm(self.fix_path(path))
+    def rm(self, path: str, **kwargs):
+        return self._fs.rm(self.fix_path(path), **kwargs)
+
+    def mv(self, path1: str, path2: str, **kwargs):
+        return self._fs.mv(self.fix_path(path1), self.fix_path(path2), **kwargs)
 
     def fix_path(self, path: str):
         # Remove protocol from the path if it exists
