@@ -25,6 +25,9 @@ class MadFileSystem(fsspec.AbstractFileSystem):
     def _open(self, path: str, mode: str = "rb", **kwargs):
         return self._fs._open(self.fix_path(path), mode, **kwargs)
 
+    def _rm(self, path):
+        return self._fs._rm(self.fix_path(path))
+
     def fix_path(self, path: str):
         # Remove protocol from the path if it exists
         if path.startswith(f"{self.protocol}://"):
