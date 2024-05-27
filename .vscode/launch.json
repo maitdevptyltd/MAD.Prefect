@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Run Current File as Module",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "internalConsole",
+            "code": "import runpy; runpy.run_module(r'${relativeFileDirname}'.replace('\\\\', '.') + r'.${fileBasenameNoExtension}', run_name='__main__')",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false
+        }
+    ]
+}

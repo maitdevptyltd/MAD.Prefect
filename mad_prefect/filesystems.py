@@ -12,6 +12,7 @@ from prefect.blocks.fields import SecretDict
 import sshfs
 import tempfile
 
+
 fsspec.register_implementation("ssh", sshfs.SSHFileSystem)
 fsspec.register_implementation("sftp", sshfs.SSHFileSystem)
 

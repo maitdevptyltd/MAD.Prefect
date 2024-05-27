@@ -11,11 +11,13 @@ prefect = "~2.18"
 pandas = "^2.1.1"
 sshfs = "^2024.4.1"
 fsspec = "^2024.3.1"
+duckdb = "0.10.2"
 
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
 pytest-asyncio = "^0.21.1"
+ipykernel = "^6.29.4"
 
 [build-system]
 requires = ["poetry-core"]
