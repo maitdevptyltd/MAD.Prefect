@@ -50,29 +50,3 @@ def register_mad_filesystem(connection: duckdb.DuckDBPyConnection | None = None)
         connection.register_filesystem(fs)
     else:
         duckdb.register_filesystem(fs)
-
-
-if __name__ == "__main__":
-    # Override the filesystem url for testing purposes
-    FILESYSTEM_URL = "file://./tests"
-    register_mad_filesystem()
-
-    # Execute the SQL query to select all data from the specified file
-    test = duckdb.sql("SELECT * FROM 'mad://sample1.parquet'")
-
-    # Assert that the query result is not empty
-    assert test
-
-    # Execute a query to count the number of rows in the 'column0'
-    count_result = duckdb.sql(
-        "SELECT COUNT(*) AS count FROM 'mad://sample1.parquet'"
-    ).fetchone()
-
-    assert count_result
-
-    # Extract the count value from the result
-    count_value = count_result[0]
-
-    # Assert the count value (or use it as needed)
-    assert count_value
-    print("Count of column0:", count_value)
