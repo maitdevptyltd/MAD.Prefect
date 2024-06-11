@@ -1,7 +1,8 @@
 from typing import Any, cast
 import duckdb
 import fsspec
-from mad_prefect.filesystems import FILESYSTEM_URL
+from mad_prefect.filesystems import FILESYSTEM_URL, get_fs
+import warnings
 
 
 class MadFileSystem(fsspec.AbstractFileSystem):
@@ -44,9 +45,23 @@ class MadFileSystem(fsspec.AbstractFileSystem):
 
 
 def register_mad_filesystem(connection: duckdb.DuckDBPyConnection | None = None):
+    warnings.warn(
+        "register_mad_filesystem is deprecated. Use register_mad_protocol instead.",
+        DeprecationWarning,
+    )
     fs = MadFileSystem(FILESYSTEM_URL)
 
     if connection:
         connection.register_filesystem(fs)
     else:
         duckdb.register_filesystem(fs)
+
+
+async def register_mad_protocol(connection: duckdb.DuckDBPyConnection | None = None):
+    fs = await get_fs()
+    mad_fs = MadFileSystem(fs.basepath, fs.storage_options)
+
+    if connection:
+        connection.register_filesystem(mad_fs)
+    else:
+        duckdb.register_filesystem(mad_fs)
