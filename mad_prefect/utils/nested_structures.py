@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 import duckdb
 import pandas as pd
@@ -6,6 +7,7 @@ from prefect import flow
 from mad_prefect.duckdb import register_mad_protocol
 import mad_prefect.filesystems
 from mad_prefect.filesystems import get_fs
+from typing import Callable, Union
 
 mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"
 
@@ -15,16 +17,16 @@ mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"
 
 def extract_json_columns(table_name: str, folder: str):
     """
-    This function is designed to identify nested structures that have been serialized as VARCHAR.
+    This function is designed to identify nested structures that have been serialized as VARCHAR or JSON.
     """
     # Query to get VARCHAR columns, excluding array types
-    varchar_columns = (
+    target_columns = (
         duckdb.query(
             f"""
         SELECT * 
         FROM (DESCRIBE SELECT * FROM 'mad://bronze/{folder}/{table_name}.parquet') 
         WHERE column_type NOT LIKE '%[]%'
-            AND column_type LIKE '%VARCHAR%'
+            AND (column_type LIKE '%VARCHAR%' OR column_type LIKE '%JSON%')
         """
         )
         .df()["column_name"]
@@ -32,7 +34,7 @@ def extract_json_columns(table_name: str, folder: str):
     )
 
     json_columns = []
-    for column in varchar_columns:
+    for column in target_columns:
         # Check if the column contains valid JSON based on first 100 rows
         json_check = duckdb.query(
             f""" 
@@ -52,33 +54,6 @@ def extract_json_columns(table_name: str, folder: str):
     return json_columns
 
 
-async def is_variable_json_structure(column_name: str, table_name: str, folder: str):
-    await register_mad_protocol()
-    sample_data = duckdb.query(
-        f"""
-            SELECT CAST({column_name} AS JSON) AS json_column
-            FROM 'mad://bronze/{folder}/{table_name}.parquet'
-            WHERE {column_name} IS NOT NULL
-            LIMIT 1000
-        """
-    )
-    json_keys = duckdb.query(
-        """
-            SELECT UNNEST(json_keys(json_column)) AS key
-            FROM sample_data
-        """
-    )
-    result = duckdb.query(
-        """
-        SELECT 
-            COUNT(DISTINCT key) > 0.5 * COUNT(*) AS is_variable_structure
-        FROM json_keys
-        """
-    ).fetchone()[0]
-
-    return result
-
-
 async def extract_complex_columns(table_name: str, folder: str):
     """
     This function extracts and categorizes complex columns from a parquet file,
@@ -96,106 +71,92 @@ async def extract_complex_columns(table_name: str, folder: str):
     # Identify JSON-like columns
     json_columns = extract_json_columns(table_name, folder)
 
+    if json_columns:
+        json_columns_str = ", ".join(f"'{col}'" for col in json_columns)
+        json_insert_str = f"WHEN column_name IN ({json_columns_str}) THEN 'JSON'"
+    else:
+        json_insert_str = ""
+
     # Categorize columns based on their type
-    columns_data = duckdb.query(
+    columns_data_full = duckdb.query(
         f"""
         SELECT 
             column_name,
             CASE
                 WHEN column_type LIKE '%STRUCT%' THEN 'STRUCT'
                 WHEN column_type LIKE '%[]%' THEN 'ARRAY'
-                WHEN column_name IN ({', '.join(f"'{col}'" for col in json_columns)}) THEN 'JSON'
+                {json_insert_str}
                 ELSE 'OTHER'
             END AS column_type
         FROM metadata
     """
-    ).df()
+    )
+
+    columns_data = duckdb.query(
+        "SELECT * FROM columns_data_full WHERE column_type != 'OTHER'"
+    )
 
     return columns_data
 
 
 ### Utility functions designed to unpack different nested structures
-async def process_complex_json_column(
-    folder: str, table_name: str, json_column: str, parent_id_alias: str
-):
+
+
+def default_json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
     """
-    Targets nested nested JSON structures with irregular formats. Such as all keys equal GUIDs
-    Returns:
-        DuckDB Query with keys expanded into new rows
-    """
-
-    casted_query = duckdb.query(
-        f"""
-            SELECT {parent_id_alias} AS {table_name}_id, CAST({json_column} AS JSON) AS json_data
-            FROM 'mad://bronze/{folder}/{table_name}.parquet'
-        """
-    )
-    key_query = duckdb.query(
-        f"""
-        SELECT 
-            {table_name}_id,
-            json_data,
-            UNNEST(json_keys(json_data), max_depth:=2) AS key
-	    FROM casted_query
-        """
-    )
-    key_value_table = duckdb.query(
-        f"""
-        SELECT
-            CAST({table_name}_id AS VARCHAR) AS {table_name}_id,
-            key,
-            json_extract(json_data, CONCAT('$.',key)) AS value
-        FROM key_query  
-        """
-    ).df()
-
-    extract_quoted_text = lambda x: (
-        " ".join(re.findall(r'"(.*?)"', x)) if isinstance(x, str) else x
-    )
-
-    key_value_table["value"] = key_value_table["value"].apply(extract_quoted_text)
-    query = duckdb.query(
-        "SELECT * FROM key_value_table WHERE value IS NOT NULL AND value != ''"
-    )
-
-    return query
+    Default JSON unpacking function with row count safety check.
 
 
-async def process_simple_json_column(
-    folder: str, table_name: str, json_column: str, parent_id_column: str = "id"
-):
-    """
-    Expands a JSON column into multiple columns.
+    Args:
+        df (pd.DataFrame): Input DataFrame containing the JSON column and parent_id.
+        json_column (str): Name of the column containing JSON data.
 
     Returns:
-        DuckDB Query with the JSON expanded into columns.
-    """
-    await register_mad_protocol()
-
-    # Use json_transform to convert JSON to a struct
-    query = f"""
-    SELECT 
-        {parent_id_column} as {table_name}_id,
-        json_transform({json_column}, '$.%') AS json_struct
-    FROM 'mad://bronze/{folder}/{table_name}.parquet'
+        pd.DataFrame: DataFrame with unpacked JSON, maintaining the parent_id.
     """
 
-    df = duckdb.query(query).df()
+    try:
+        # Parse JSON strings
+        parsed_json = df[json_column].apply(json.loads)
+        object_types = set(map(type, parsed_json))
 
-    # Use pandas json_normalize to expand the struct into columns
-    json_df = pd.json_normalize(df["json_struct"])
+        # Check for consistency in object types
+        if len(object_types) > 1:
+            print(
+                f"Inconsistent data types found in {json_column}. Custom json_unpack_func should be used"
+            )
+            print(
+                f"Original nested structure retained in output file for {json_column}. Please review"
+            )
+            return df
 
-    # Add the parent_id back to the DataFrame
-    json_df[parent_id_column] = df[parent_id_column]
+        # Replace input column with parsed_json objects
+        df[json_column] = parsed_json
 
-    # Reorder columns to have parent_id first
-    columns = [parent_id_column] + [
-        col for col in json_df.columns if col != parent_id_column
-    ]
-    json_df = json_df[columns]
-    query = duckdb.query("SELECT * FROM json_df")
+        # Extract the parent_id column name (assuming it's the first column)
+        parent_id_column = df.columns[0]
 
-    return query
+        # Normalize JSON while explicitly preserving all other columns
+        df_unpacked = pd.json_normalize(
+            df.to_dict(orient="records"),
+            meta=[parent_id_column],
+            errors="ignore",
+            max_level=2,
+        )
+
+        df_unpacked.columns = [
+            col.split(".")[-1] if "." in col else col for col in df_unpacked.columns
+        ]
+
+        # Drop the original JSON column if it exists in the unpacked DataFrame
+        if json_column in df_unpacked.columns:
+            df_unpacked = df_unpacked.drop(columns=[json_column])
+
+        return df_unpacked
+
+    except Exception as e:
+        print(f"Error unpacking {json_column}: {str(e)}. Returning original DataFrame.")
+        return df
 
 
 # This uses switch logic to apply the correct unpacking method to the structure
@@ -205,12 +166,11 @@ async def process_complex_columns(
     field: str,
     folder: str,
     table_name: str,
+    json_unpack_func: Callable[[pd.DataFrame, str], pd.DataFrame],
 ):
     await register_mad_protocol()
 
     columns_query = duckdb.register("columns_query", columns_data)
-    # columns_query = duckdb.query("SELECT * FROM columns_data")
-    print(columns_query)
 
     # Identify the type of nested structure to unpack
     field_type = duckdb.query(
@@ -236,15 +196,17 @@ async def process_complex_columns(
             """
         )
     elif field_type == "JSON":
-        if await is_variable_json_structure(field, table_name, folder):
-            query = await process_complex_json_column(
-                folder, table_name, field, parent_id_alias
-            )
-        else:
-            query = await process_simple_json_column(
-                folder, table_name, field, parent_id_alias
-            )
-
+        query_df = duckdb.query(
+            f"""
+            SELECT 
+                {parent_id_alias} AS {table_name}_id, 
+                {field}
+            FROM 'mad://bronze/{folder}/{table_name}.parquet'
+            """
+        ).df()
+        unpacked_df: pd.DataFrame = json_unpack_func(query_df, field)
+        unpacked_df_table = duckdb.register("unpacked_df_table", unpacked_df)
+        query = duckdb.query("SELECT * FROM unpacked_df_table")
     else:
         return
     return query
@@ -259,13 +221,33 @@ async def extract_nested_tables(
     folder: str,
     break_out_fields: list = [],
     parent_id_alias: str = "id",
-    depth: int = 2,
+    depth: int = 0,
     prefix: str = "",
+    json_unpack_func: Callable[[pd.DataFrame, str], pd.DataFrame] = default_json_unpack,
 ):
-    await register_mad_protocol()
+    """
+    Extract and process nested tables from a parquet file.
 
-    if depth == 0:
-        return
+    Args:
+        table_name (str): Name of the table to process.
+        folder (str): Folder containing the parquet file.
+        break_out_fields (list, optional): Specific fields to process. Defaults to all complex fields.
+        parent_id_alias (str, optional): Name of the parent ID column. Defaults to "id".
+        depth (int, optional): Depth of recursion for nested structures. Defaults to 2.
+        prefix (str, optional): Prefix for output file names. Defaults to "".
+        json_unpack_func (Callable, optional): Function to unpack JSON columns.
+            Should take a DataFrame and column name as input and return a DataFrame.
+            Defaults to a basic JSON normalization function.
+
+    The json_unpack_func should have the following signature:
+    def custom_json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
+        # Custom unpacking logic here
+        return unpacked_df
+
+    Returns:
+        None
+    """
+    await register_mad_protocol()
 
     fs = await get_fs()
 
@@ -273,14 +255,13 @@ async def extract_nested_tables(
     columns_data = await extract_complex_columns(table_name, folder)
     column_list = columns_data["column_name"].tolist()
 
-    # If no break out fields are passed perform on all columns
-    if not break_out_fields:
-        break_out_fields = column_list
+    # Determine which fields to process at this level
+    current_level_fields = break_out_fields if break_out_fields else column_list
 
     next_level_fields = []
 
     # Process all first-level fields
-    for field in break_out_fields:
+    for field in current_level_fields:
         print(f"Processing run: field = {field}, table_name = {table_name}")
 
         # Handle prefixes to avoid file duplication
@@ -291,11 +272,20 @@ async def extract_nested_tables(
         # If the given field is a STRUCT column in parquet
         if field in column_list:
             query = await process_complex_columns(
-                columns_data, parent_id_alias, field, folder, table_name
+                columns_data,
+                parent_id_alias,
+                field,
+                folder,
+                table_name,
+                json_unpack_func,
             )
             print(duckdb.query("DESCRIBE SELECT * FROM query"))
             query.to_parquet(f"mad://bronze/{folder}/{prefixed_field}.parquet")
             next_level_fields.append(field)
+
+    # Do not recurse if depth limit reached.
+    if depth == 0:
+        return
 
     # Recurse into the collected fields
     for new_table_name in next_level_fields:
@@ -310,14 +300,20 @@ async def extract_nested_tables(
             f"{prefix}_{new_table_name}" if prefix else new_table_name
         )
 
-        # Run SQL query on new table and extract the STRUCT columns
-        new_columns = await extract_complex_columns(new_table_name_with_prefix, folder)
+        # Run SQL query on new table and extract the complex columns
+        new_column_data = await extract_complex_columns(
+            new_table_name_with_prefix, folder
+        )
+        new_columns = new_column_data["column_name"].tolist()
+
+        # For the next level, use all new complex columns if no break_out_fields specified
+        next_level_break_out = break_out_fields if break_out_fields else new_columns
 
         # Recall the function with the new params
         await extract_nested_tables(
             folder=folder,
             table_name=new_table_name_with_prefix,
-            break_out_fields=new_columns,
+            break_out_fields=next_level_break_out,
             parent_id_alias=new_parent_id_alias,
             depth=depth - 1,
             prefix=new_prefix,
