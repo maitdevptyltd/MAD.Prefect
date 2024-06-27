@@ -94,7 +94,7 @@ async def extract_complex_columns(table_name: str, folder: str):
 
     columns_data = duckdb.query(
         "SELECT * FROM columns_data_full WHERE column_type != 'OTHER'"
-    )
+    ).df()
 
     return columns_data
 
@@ -126,9 +126,9 @@ def default_json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
                 f"Inconsistent data types found in {json_column}. Custom json_unpack_func should be used"
             )
             print(
-                f"Original nested structure retained in output file for {json_column}. Please review"
+                f"Skipping {json_column}. Please review and provide a custom json_unpack_func if needed."
             )
-            return df
+            return pd.DataFrame()  # Return an empty DataFrame
 
         # Replace input column with parsed_json objects
         df[json_column] = parsed_json
@@ -155,8 +155,8 @@ def default_json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
         return df_unpacked
 
     except Exception as e:
-        print(f"Error unpacking {json_column}: {str(e)}. Returning original DataFrame.")
-        return df
+        print(f"Error unpacking {json_column}: {str(e)}. Returning empty DataFrame.")
+        return pd.DataFrame()  # Return an empty DataFrame
 
 
 # This uses switch logic to apply the correct unpacking method to the structure
@@ -205,6 +205,8 @@ async def process_complex_columns(
             """
         ).df()
         unpacked_df: pd.DataFrame = json_unpack_func(query_df, field)
+        if unpacked_df.empty:
+            return None
         unpacked_df_table = duckdb.register("unpacked_df_table", unpacked_df)
         query = duckdb.query("SELECT * FROM unpacked_df_table")
     else:
@@ -251,7 +253,7 @@ async def extract_nested_tables(
 
     fs = await get_fs()
 
-    # Extract the STRUCT columns from the table
+    # Extract the complex columns from the table
     columns_data = await extract_complex_columns(table_name, folder)
     column_list = columns_data["column_name"].tolist()
 
@@ -262,14 +264,13 @@ async def extract_nested_tables(
 
     # Process all first-level fields
     for field in current_level_fields:
-        print(f"Processing run: field = {field}, table_name = {table_name}")
 
         # Handle prefixes to avoid file duplication
         paths = fs.glob(f"bronze/{folder}/**/*_{field}.parquet")
         counter = len(paths)
         prefixed_field = f"{prefix}_{field}" if prefix else field
 
-        # If the given field is a STRUCT column in parquet
+        # If the given field is a complex column in parquet
         if field in column_list:
             query = await process_complex_columns(
                 columns_data,
@@ -279,9 +280,13 @@ async def extract_nested_tables(
                 table_name,
                 json_unpack_func,
             )
-            print(duckdb.query("DESCRIBE SELECT * FROM query"))
-            query.to_parquet(f"mad://bronze/{folder}/{prefixed_field}.parquet")
-            next_level_fields.append(field)
+
+            if query:
+                print(duckdb.query("DESCRIBE SELECT * FROM query"))
+                data = query.df()
+                await fs.write_data(f"bronze/{folder}/{prefixed_field}.parquet", data)
+                # query.to_parquet(f"mad://bronze/{folder}/{prefixed_field}.parquet")
+                next_level_fields.append(field)
 
     # Do not recurse if depth limit reached.
     if depth == 0:
@@ -325,7 +330,7 @@ if __name__ == "__main__":
         extract_nested_tables(
             table_name="sample3",
             folder="nested_structures",
-            break_out_fields=["address", "hobbies", "contact_details"],
+            break_out_fields=["contact_details", "employment", "hobbies"],
             depth=1,
         )
     )
