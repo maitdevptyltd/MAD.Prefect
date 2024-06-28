@@ -8,8 +8,24 @@ from mad_prefect.duckdb import register_mad_protocol
 import mad_prefect.filesystems
 from mad_prefect.filesystems import get_fs
 from typing import Callable, Union
+from sqlalchemy.dialects import postgresql
 
 mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"
+
+
+def get_duckdb_reserved_words():
+    query = duckdb.query(
+        "SELECT keyword_name FROM duckdb_keywords() WHERE keyword_category = 'reserved'"
+    ).fetchall()
+    return set(word[0].lower() for word in query)
+
+
+def quote_if_reserved(column_name):
+    reserved_keywords = get_duckdb_reserved_words()
+    if column_name.lower() in reserved_keywords:
+        return f'"{column_name}"'
+    return column_name
+
 
 ### Utility functions designed to extract metadata for parquet files
 ### To guide process for unpacking nested structures
@@ -36,18 +52,20 @@ def extract_json_columns(table_name: str, folder: str):
     json_columns = []
     for column in target_columns:
         # Check if the column contains valid JSON based on first 100 rows
-        json_check = duckdb.query(
-            f""" 
+        col = quote_if_reserved(column)
+        json_check_query = f""" 
                 SELECT COUNT(*) = 0
                 FROM (
-                    SELECT TRY_CAST({column} AS JSON) AS json_check
+                    SELECT TRY_CAST({col} AS JSON) AS json_check
                     FROM 'mad://bronze/{folder}/{table_name}.parquet'
-                    WHERE {column} IS NOT NULL 
+                    WHERE {col} IS NOT NULL 
                     LIMIT 100
                 )
                 WHERE json_check IS NULL
             """
-        ).fetchone()[0]
+
+        print(json_check_query)
+        json_check = duckdb.query(json_check_query).fetchone()
         if json_check:
             json_columns.append(column)
 
@@ -167,6 +185,7 @@ async def process_complex_columns(
     folder: str,
     table_name: str,
     json_unpack_func: Callable[[pd.DataFrame, str], pd.DataFrame],
+    primary_key: str = "id",
 ):
     await register_mad_protocol()
 
@@ -199,7 +218,7 @@ async def process_complex_columns(
         query_df = duckdb.query(
             f"""
             SELECT 
-                {parent_id_alias} AS {table_name}_id, 
+                {primary_key} AS {table_name}_id, 
                 {field}
             FROM 'mad://bronze/{folder}/{table_name}.parquet'
             """
@@ -223,6 +242,7 @@ async def extract_nested_tables(
     folder: str,
     break_out_fields: list = [],
     parent_id_alias: str = "id",
+    primary_key: str = "id",
     depth: int = 0,
     prefix: str = "",
     json_unpack_func: Callable[[pd.DataFrame, str], pd.DataFrame] = default_json_unpack,
@@ -279,13 +299,14 @@ async def extract_nested_tables(
                 folder,
                 table_name,
                 json_unpack_func,
+                primary_key=primary_key,
             )
 
             if query:
                 print(duckdb.query("DESCRIBE SELECT * FROM query"))
-                data = query.df()
-                await fs.write_data(f"bronze/{folder}/{prefixed_field}.parquet", data)
-                # query.to_parquet(f"mad://bronze/{folder}/{prefixed_field}.parquet")
+                # data = query.df()
+                # await fs.write_data(f"bronze/{folder}/{prefixed_field}.parquet", data)
+                query.to_parquet(f"mad://bronze/{folder}/{prefixed_field}.parquet")
                 next_level_fields.append(field)
 
     # Do not recurse if depth limit reached.
@@ -328,9 +349,9 @@ async def extract_nested_tables(
 if __name__ == "__main__":
     asyncio.run(
         extract_nested_tables(
-            table_name="sample3",
-            folder="nested_structures",
-            break_out_fields=["contact_details", "employment", "hobbies"],
-            depth=1,
+            table_name="dockets",
+            folder="dockets",
+            break_out_fields=["resources", "interactions"],
+            depth=2,
         )
     )
