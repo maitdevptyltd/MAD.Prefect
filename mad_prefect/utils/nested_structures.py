@@ -57,8 +57,6 @@ def extract_json_columns(table_name: str, folder: str):
         if json_check_query == 0:
             json_columns.append(column)
 
-    print(f"Here are the json columns from {table_name}")
-    print(json_columns)
     return json_columns
 
 
@@ -339,9 +337,19 @@ async def extract_nested_tables(
 if __name__ == "__main__":
     asyncio.run(
         extract_nested_tables(
-            break_out_fields=["lineCodes", "fileCodes"],
-            table_name="docketfiles",
-            folder="docketfiles",
+            break_out_fields=[
+                "Location",
+                "CumulativeOperatingHours",
+                "Distance",
+                "FuelUsed",
+                "FuelUsedLast24",
+                "FuelRemaining",
+                "CumulativeIdleNonOperatingHours",
+                "DEFRemaining",
+            ],
+            folder="hitachi",
+            table_name="equipment",
+            parent_id_alias="PIN",
             depth=1,
         )
     )
