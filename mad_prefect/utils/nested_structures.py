@@ -39,11 +39,10 @@ def extract_json_columns(table_name: str, folder: str):
     target_columns = (
         duckdb.query(
             f"""
-        SELECT * 
-        FROM (DESCRIBE SELECT * FROM 'mad://bronze/{folder}/{table_name}.parquet') 
-        WHERE column_type NOT LIKE '%[]%'
-            AND (column_type LIKE '%VARCHAR%' OR column_type LIKE '%JSON%')
-        """
+                SELECT * 
+                FROM (DESCRIBE SELECT * FROM 'mad://bronze/{folder}/{table_name}.parquet') 
+                WHERE column_type = 'VARCHAR' OR column_type = 'JSON'
+            """
         )
         .df()["column_name"]
         .tolist()
@@ -53,22 +52,27 @@ def extract_json_columns(table_name: str, folder: str):
     for column in target_columns:
         # Check if the column contains valid JSON based on first 100 rows
         col = quote_if_reserved(column)
-        json_check_query = f""" 
-                SELECT COUNT(*) = 0
-                FROM (
-                    SELECT TRY_CAST({col} AS JSON) AS json_check
+        json_check_query = duckdb.query(
+            f"""
+                SELECT
+                    SUM(non_json)
+                FROM
+                    (SELECT 
+                        CASE
+                            WHEN {col} LIKE '{{%}}' OR {col} LIKE '[%]' THEN 0
+                            ELSE 1
+                        END non_json
                     FROM 'mad://bronze/{folder}/{table_name}.parquet'
-                    WHERE {col} IS NOT NULL 
-                    LIMIT 100
-                )
-                WHERE json_check IS NULL
+                    WHERE {col} NOT NULL
+                    LIMIT 100)
             """
+        ).fetchone()[0]
 
-        print(json_check_query)
-        json_check = duckdb.query(json_check_query).fetchone()
-        if json_check:
+        if json_check_query == 0:
             json_columns.append(column)
 
+    print(f"Here are the json columns from {table_name}")
+    print(json_columns)
     return json_columns
 
 
@@ -146,7 +150,7 @@ def default_json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
             print(
                 f"Skipping {json_column}. Please review and provide a custom json_unpack_func if needed."
             )
-            return pd.DataFrame()  # Return an empty DataFrame
+            return pd.DataFrame()
 
         # Replace input column with parsed_json objects
         df[json_column] = parsed_json
@@ -349,9 +353,10 @@ async def extract_nested_tables(
 if __name__ == "__main__":
     asyncio.run(
         extract_nested_tables(
-            table_name="dockets",
-            folder="dockets",
-            break_out_fields=["resources", "interactions"],
+            table_name="journals",
+            folder="xero",
+            break_out_fields=["JournalLines"],
+            parent_id_alias="JournalID",
             depth=2,
         )
     )
