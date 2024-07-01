@@ -13,20 +13,6 @@ from sqlalchemy.dialects import postgresql
 mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"
 
 
-def get_duckdb_reserved_words():
-    query = duckdb.query(
-        "SELECT keyword_name FROM duckdb_keywords() WHERE keyword_category = 'reserved'"
-    ).fetchall()
-    return set(word[0].lower() for word in query)
-
-
-def quote_if_reserved(column_name):
-    reserved_keywords = get_duckdb_reserved_words()
-    if column_name.lower() in reserved_keywords:
-        return f'"{column_name}"'
-    return column_name
-
-
 ### Utility functions designed to extract metadata for parquet files
 ### To guide process for unpacking nested structures
 
@@ -51,7 +37,7 @@ def extract_json_columns(table_name: str, folder: str):
     json_columns = []
     for column in target_columns:
         # Check if the column contains valid JSON based on first 100 rows
-        col = quote_if_reserved(column)
+        col = f'"{column}"'
         json_check_query = duckdb.query(
             f"""
                 SELECT
@@ -353,10 +339,9 @@ async def extract_nested_tables(
 if __name__ == "__main__":
     asyncio.run(
         extract_nested_tables(
-            table_name="journals",
-            folder="xero",
-            break_out_fields=["JournalLines"],
-            parent_id_alias="JournalID",
-            depth=2,
+            break_out_fields=["lineCodes", "fileCodes"],
+            table_name="docketfiles",
+            folder="docketfiles",
+            depth=1,
         )
     )
