@@ -7,10 +7,9 @@ from prefect import flow
 from mad_prefect.duckdb import register_mad_protocol
 import mad_prefect.filesystems
 from mad_prefect.filesystems import get_fs
-from typing import Callable, Union
-from sqlalchemy.dialects import postgresql
+from typing import Callable
 
-mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"
+# mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"
 
 
 ### Utility functions designed to extract metadata for parquet files
