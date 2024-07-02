@@ -105,7 +105,7 @@ async def extract_complex_columns(table_name: str, folder: str):
 ### Utility functions designed to unpack different nested structures
 
 
-def default_json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
+def json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
     """
     Default JSON unpacking function with row count safety check.
 
@@ -233,7 +233,7 @@ async def extract_nested_tables(
     primary_key: str = "id",
     depth: int = 0,
     prefix: str = "",
-    json_unpack_func: Callable[[pd.DataFrame, str], pd.DataFrame] = default_json_unpack,
+    json_unpack_func: Callable[[pd.DataFrame, str], pd.DataFrame] = json_unpack,
 ):
     """
     Extract and process nested tables from a parquet file.
