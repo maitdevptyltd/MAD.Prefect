@@ -136,13 +136,14 @@ def default_json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
         # Replace input column with parsed_json objects
         df[json_column] = parsed_json
 
-        # Extract the parent_id column name (assuming it's the first column)
-        parent_id_column = df.columns[0]
+        # Extract the non-json columns to retain after unpacking
+        df_columns: list = df.columns.to_list()
+        meta_columns: list = df_columns.remove(json_column)
 
         # Normalize JSON while explicitly preserving all other columns
         df_unpacked = pd.json_normalize(
             df.to_dict(orient="records"),
-            meta=[parent_id_column],
+            meta=meta_columns,
             errors="ignore",
             max_level=2,
         )
@@ -159,7 +160,9 @@ def default_json_unpack(df: pd.DataFrame, json_column: str) -> pd.DataFrame:
 
     except Exception as e:
         print(f"Error unpacking {json_column}: {str(e)}. Returning empty DataFrame.")
-        return pd.DataFrame()  # Return an empty DataFrame
+
+        # Return an empty DataFrame which will prevent table from being created.
+        return pd.DataFrame()
 
 
 # This uses switch logic to apply the correct unpacking method to the structure
@@ -293,7 +296,9 @@ async def extract_nested_tables(
                 query.to_parquet(f"mad://bronze/{folder}/{prefixed_field}.parquet")
                 next_level_fields.append(field)
             else:
-                print(f"Could not produce table for {field} from {table_name} file due to empty or inconsistent structure.")
+                print(
+                    f"Could not produce table for {field} from {table_name} file due to empty or inconsistent structure."
+                )
 
     # Do not recurse if depth limit reached.
     if depth == 0:
