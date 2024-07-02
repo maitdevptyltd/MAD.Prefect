@@ -52,9 +52,11 @@ def extract_json_columns(table_name: str, folder: str):
                     WHERE {col} NOT NULL
                     LIMIT 100)
             """
-        ).fetchone()[0]
+        ).fetchone()
 
-        if json_check_query == 0:
+        json_check_query_result = json_check_query[0] if json_check_query else None
+
+        if json_check_query_result == 0:
             json_columns.append(column)
 
     return json_columns
@@ -180,9 +182,11 @@ async def process_complex_columns(
     columns_query = duckdb.register("columns_query", columns_data)
 
     # Identify the type of nested structure to unpack
-    field_type = duckdb.query(
+    field_type_query = duckdb.query(
         f"SELECT column_type FROM columns_query WHERE column_name = '{field}'"
-    ).fetchone()[0]
+    ).fetchone()
+
+    field_type = field_type_query[0] if field_type_query else None
 
     if field_type == "STRUCT":
         query = duckdb.query(
@@ -351,5 +355,5 @@ if __name__ == "__main__":
             table_name="equipment",
             parent_id_alias="PIN",
             depth=1,
-        )
+        )  # type: ignore
     )
