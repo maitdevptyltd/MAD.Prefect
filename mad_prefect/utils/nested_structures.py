@@ -65,13 +65,11 @@ async def extract_complex_columns(table_name: str, folder: str):
     including STRUCT, ARRAY, and JSON-like VARCHAR columns.
     """
     await register_mad_protocol()
-    print(f"extracting columns for {table_name}")
 
     # Get table metadata
     metadata = duckdb.query(
         f"DESCRIBE SELECT * FROM 'mad://bronze/{folder}/{table_name}.parquet'"
     )
-    print(metadata)
 
     # Identify JSON-like columns
     json_columns = extract_json_columns(table_name, folder)
@@ -290,11 +288,12 @@ async def extract_nested_tables(
             )
 
             if query:
-                print(duckdb.query("DESCRIBE SELECT * FROM query"))
                 # data = query.df()
                 # await fs.write_data(f"bronze/{folder}/{prefixed_field}.parquet", data)
                 query.to_parquet(f"mad://bronze/{folder}/{prefixed_field}.parquet")
                 next_level_fields.append(field)
+            else:
+                print(f"Could not produce table for {field} from {table_name} file due to empty or inconsistent structure.")
 
     # Do not recurse if depth limit reached.
     if depth == 0:
