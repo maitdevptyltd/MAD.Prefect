@@ -57,10 +57,9 @@ async def bronze_org_users_2():
         f"SELECT organisation_id AS org_id, UNNEST(users, max_depth:=2) AS users FROM orgs_query"
     )
 
-    result = register_query(org_users_unnested)
+    result = org_users_unnested.create(org_users_unnested)
 
-    print(inspect.getsource(duckdb.sql))
-    print(inspect.getsource(duckdb.query))
+    print(type(result))
 
     return result
 

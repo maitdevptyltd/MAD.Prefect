@@ -2,6 +2,7 @@ from datetime import datetime
 import inspect
 from typing import Callable
 import duckdb
+import httpx
 from mad_prefect.filesystems import get_fs
 from mad_prefect.duckdb import register_mad_protocol, write_duckdb
 
@@ -21,49 +22,60 @@ class DataAsset:
         self.last_refreshed = datetime.utcnow()
 
         if inspect.isasyncgen(result):
-            chunk_number = 1
-            async for chunk in result:
-                await self._write_chunk(chunk, chunk_number)
-                chunk_number += 1
-                yield chunk
-            await self._process_chunks()
+            self._handle_yield(result)
         else:
-            await self._write_output(result)
-            return result
+            self._handle_return(result)
 
-    async def _write_output(self, data):
+    async def _handle_yield(self, generator):
         fs = await get_fs()
-        await register_mad_protocol()
-        if isinstance(data, (duckdb.DuckDBPyConnection, duckdb.DuckDBPyRelation)):
-            await write_duckdb(self.path, data)
-        else:
-            await fs.write_data(self.path, data)
+        await register_mad_protocol
+        fragment_number = 1
 
-    async def _write_chunk(self, chunk, chunk_number):
-        fs = await get_fs()
-        await register_mad_protocol()
-
-        if isinstance(chunk, (duckdb.DuckDBPyConnection, duckdb.DuckDBPyRelation)):
-            await write_duckdb(f"{self.path}/artifacts/{chunk_number}.parquet", chunk)
-        else:
-            await fs.write_data(f"{self.path}/artifacts/{chunk_number}.parquet", chunk)
-
-    async def _process_chunks(self):
-        fs = await get_fs()
-        await register_mad_protocol()
-        paths = fs.glob(f"{self.path}/artifacts/**/*.parquet")
-        first_chunk = True
-
-        for path in paths:
-            chunk = duckdb.query(f"SELECT * FROM 'mad://{path}'")
-            if first_chunk:
-                duckdb.query(f"COPY chunk TO '{self.path}' (FORMAT PARQUET)")
+        async for output in generator:
+            if isinstance(output, httpx.Response):
+                params = dict(output.request.url.params)
+                path = self._build_path(params)
+                data = output.json() if output.json() else output.text
+                await fs.write_data(path, data)
             else:
-                duckdb.query(
-                    f"COPY chunk TO '{self.path}' (FORMAT PARQUET, APPEND TRUE)"
-                )
-            first_chunk = False
-            yield chunk
+                path = f"{self.path}/_artifacts/fragment{fragment_number}.json"
+                await fs.write_data(path, output)
+                fragment_number += 1
+
+        duckdb.query("SET temp_directory = './.tmp/duckdb/'")
+        duckdb.query(
+            f"""
+                COPY (
+                SELECT *
+                FROM read_json_auto('mad://{self.path}/_artifacts/**/*.json', union_by_name = true, maximum_object_size = 33554432)
+                ) TO 'mad://{self.path}' (use_tmp_file false)
+
+            """
+        )
+
+    async def _handle_return(self, output):
+        fs = await get_fs()
+        await register_mad_protocol
+        if isinstance(output, httpx.Response):
+            params = dict(output.request.url.params)
+            path = self._build_path(params)
+            data = output.json() if output.json() else output.text
+            await fs.write_data(path, data)
+        # TODO: write code for DuckDB Relation outputs
+        else:
+            await fs.write_data(self.path, output)
+
+    def _build_path(self, params: dict | None = None):
+        params_path = (
+            "/".join(f"{key}={value}" for key, value in params.items())
+            if params
+            else ""
+        )
+        if params_path:
+            # TODO: need to remove file name from path here
+            path = f"{self.path}/_artifacts/{params_path}.json"
+
+        return path
 
     async def query(self):
         # TODO: query shouldn't __call__ every time to materialize the asset for querying, in the future develop
