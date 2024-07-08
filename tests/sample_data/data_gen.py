@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from faker import Faker
 import random
 import json
@@ -31,7 +32,7 @@ async def get_api(endpoint="organisations", params=None):
 
     data = {
         "api_version": "1.0",
-        "timestamp": fake.iso8601(),
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "record_count": limit,
         "offset": offset,
         endpoint: [],
