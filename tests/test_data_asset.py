@@ -1,9 +1,6 @@
 import asyncio
-import inspect
-
 import duckdb
 from mad_prefect.data_assets import asset
-from mad_prefect.duckdb import register_query
 from tests.sample_data.mock_api import get_api
 import mad_prefect.filesystems
 import pandas as pd

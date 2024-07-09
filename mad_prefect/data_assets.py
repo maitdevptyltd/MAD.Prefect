@@ -9,26 +9,24 @@ import re
 
 
 class DataAsset:
-    def __init__(self, fn: Callable, path: str, artifacts_path: str | None = None):
+    def __init__(self, fn: Callable, path: str, artifacts_dir: str | None = None):
         self.__fn = fn
         self.path = path
-        self.artifacts_path = artifacts_path
-        self.name = fn.__name__
+        self.artifacts_dir = artifacts_dir
+        self.name = re.search(r"([^\\/]+)(?:\.[^\\/\.]+)?$", self.path).group(1)
         self.last_refreshed = None
 
         pass
 
     async def __call__(self, *args, **kwargs):
-        # Call the fn to materialize the asset
-        result = await self.__fn(*args, **kwargs)
+
+        if inspect.isasyncgen(self.__fn(*args, **kwargs)):
+            self._handle_yield(*args, **kwargs)
+        else:
+            self._handle_return(*args, **kwargs)
         self.last_refreshed = datetime.utcnow()
 
-        if inspect.isasyncgen(result):
-            self._handle_yield(result)
-        else:
-            self._handle_return(result)
-
-    async def _handle_yield(self, generator):
+    async def _handle_yield(self, *args, **kwargs):
         # Set up filesystem abstraction
         fs = await get_fs()
         await register_mad_protocol
@@ -37,13 +35,13 @@ class DataAsset:
         fragment_number = 1
 
         # Set up the base path for artifact storage
-        if not self.artifacts_path:
+        if not self.artifacts_dir:
             # Remove end filename & extension for self.path
             base_path = re.sub(r"[^/\\]+$", "", self.path)
         else:
-            base_path = self.artifacts_path
+            base_path = self.artifacts_dir
 
-        async for output in generator:
+        async for output in self.__fn(*args, **kwargs):
             if isinstance(output, httpx.Response):
                 # If API response has params use these in filepath for hive partitioning
                 if output.request.url.params:
@@ -81,14 +79,22 @@ class DataAsset:
             """
         )
 
-    async def _handle_return(self, output):
+    async def _handle_return(self, *args, **kwargs):
+        output = await self.__fn(*args, **kwargs)
+
         # Set up filesystem abstraction
         fs = await get_fs()
         await register_mad_protocol
 
+        # Set up full artifact path
+        if self.artifacts_dir:
+            artifact_path = f"{self.artifacts_dir}/_artifact/{self.name}.json"
+
         if isinstance(output, httpx.Response):
             data = output.json() if output.json() else output.text
             await fs.write_data(self.path, data)
+            if artifact_path:
+                await fs.write_data(artifact_path, data)
 
         elif isinstance(output, duckdb.DuckDBPyRelation):
             duckdb.query("SET temp_directory = './.tmp/duckdb/'")
@@ -99,9 +105,19 @@ class DataAsset:
                     ) TO 'mad://{self.path}' (use_tmp_file true)
                 """
             )
+            if artifact_path:
+                duckdb.query(
+                    f"""
+                        COPY(
+                            SELECT * FROM {output}
+                        ) TO 'mad://{artifact_path}' (use_tmp_file true)
+                    """
+                )
 
         else:
             await fs.write_data(self.path, output)
+            if artifact_path:
+                await fs.write_data(artifact_path, output)
 
     def _build_params_path(
         self,

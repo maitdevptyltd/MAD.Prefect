@@ -1,6 +1,5 @@
 import asyncio
 import inspect
-
 import httpx
 from tests.sample_data.mock_api import generate_data, get_api, ingest_endpoint
 
@@ -79,7 +78,6 @@ async def test_param_extraction():
 
 
 ## Testing functions for ingest_endpoint ##
-
 
 # Testing output type is async_generator
 async def test_iterator_output():
