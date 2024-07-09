@@ -6,7 +6,7 @@ import duckdb
 import json
 
 from mad_prefect.duckdb import register_query
-from tests.sample_data.data_gen import get_api
+from tests.sample_data.mock_api import get_api
 
 # Override the environment variable before importing register_mad_filesystem
 mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"

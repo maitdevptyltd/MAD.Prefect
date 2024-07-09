@@ -4,13 +4,15 @@ from typing import Callable
 import duckdb
 import httpx
 from mad_prefect.filesystems import get_fs
-from mad_prefect.duckdb import register_mad_protocol, write_duckdb
+from mad_prefect.duckdb import register_mad_protocol
+import re
 
 
 class DataAsset:
-    def __init__(self, fn: Callable, path: str):
+    def __init__(self, fn: Callable, path: str, artifacts_path: str | None = None):
         self.__fn = fn
         self.path = path
+        self.artifacts_path = artifacts_path
         self.name = fn.__name__
         self.last_refreshed = None
 
@@ -27,53 +29,108 @@ class DataAsset:
             self._handle_return(result)
 
     async def _handle_yield(self, generator):
+        # Set up filesystem abstraction
         fs = await get_fs()
         await register_mad_protocol
+
+        # Set up starting fragment_number
         fragment_number = 1
+
+        # Set up the base path for artifact storage
+        if not self.artifacts_path:
+            # Remove end filename & extension for self.path
+            base_path = re.sub(r"[^/\\]+$", "", self.path)
+        else:
+            base_path = self.artifacts_path
 
         async for output in generator:
             if isinstance(output, httpx.Response):
-                params = dict(output.request.url.params)
-                path = self._build_path(params)
+                # If API response has params use these in filepath for hive partitioning
+                if output.request.url.params:
+                    params_path = self._build_params_path(
+                        dict(output.request.url.params)
+                    )
+                    path = f"{base_path}/_artifacts/{params_path}.json"
+
+                # If there aren't params use fragment number for hive partitioning
+                else:
+                    path = f"{base_path}/_artifacts/fragment={fragment_number}.json"
+
                 data = output.json() if output.json() else output.text
-                await fs.write_data(path, data)
+
+            # If output is not httpx.Response use fragment number for hive partitioning
             else:
-                path = f"{self.path}/_artifacts/fragment{fragment_number}.json"
-                await fs.write_data(path, output)
-                fragment_number += 1
+                path = f"{base_path}/_artifacts/fragment={fragment_number}.json"
+                data = output
+
+            await fs.write_data(path, data)
+
+            # Update fragment_number if used in path
+            fragment_number = (
+                (fragment_number + 1) if "fragment=" in path else fragment_number
+            )
 
         duckdb.query("SET temp_directory = './.tmp/duckdb/'")
         duckdb.query(
             f"""
                 COPY (
                 SELECT *
-                FROM read_json_auto('mad://{self.path}/_artifacts/**/*.json', union_by_name = true, maximum_object_size = 33554432)
+                FROM read_json_auto('mad://{base_path}/_artifacts/**/*.json', hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
                 ) TO 'mad://{self.path}' (use_tmp_file false)
 
             """
         )
 
     async def _handle_return(self, output):
+        # Set up filesystem abstraction
         fs = await get_fs()
         await register_mad_protocol
+
         if isinstance(output, httpx.Response):
-            params = dict(output.request.url.params)
-            path = self._build_path(params)
             data = output.json() if output.json() else output.text
-            await fs.write_data(path, data)
-        # TODO: write code for DuckDB Relation outputs
+            await fs.write_data(self.path, data)
+
+        elif isinstance(output, duckdb.DuckDBPyRelation):
+            duckdb.query("SET temp_directory = './.tmp/duckdb/'")
+            duckdb.query(
+                f"""
+                    COPY(
+                        SELECT * FROM {output}
+                    ) TO 'mad://{self.path}' (use_tmp_file true)
+                """
+            )
+
         else:
             await fs.write_data(self.path, output)
 
-    def _build_path(self, params: dict | None = None):
+    def _build_params_path(
+        self,
+        params: dict | None = None,
+    ):
+
         params_path = (
             "/".join(f"{key}={value}" for key, value in params.items())
             if params
             else ""
         )
+        return params_path
+
+    def _build_artifact_path(
+        self,
+        base_path: str,
+        params: dict | None = None,
+        fragment_number: int | None = None,
+    ):
+        params_path = (
+            "/".join(f"{key}={value}" for key, value in params.items())
+            if params
+            else ""
+        )
+
         if params_path:
-            # TODO: need to remove file name from path here
-            path = f"{self.path}/_artifacts/{params_path}.json"
+            path = f"{base_path}/_artifacts/{params_path}.json"
+        else:
+            path = f"{base_path}/_artifacts/fragment={fragment_number}.json"
 
         return path
 

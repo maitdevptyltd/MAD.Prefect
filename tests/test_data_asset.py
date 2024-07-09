@@ -4,7 +4,7 @@ import inspect
 import duckdb
 from mad_prefect.data_assets import asset
 from mad_prefect.duckdb import register_query
-from tests.sample_data.data_gen import get_api
+from tests.sample_data.mock_api import get_api
 import mad_prefect.filesystems
 import pandas as pd
 
@@ -15,7 +15,7 @@ mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests/sample_data"
 # Initialize data asset using decorator
 @asset(f"bronze/organisations.parquet")
 async def bronze_organisations():
-    from tests.sample_data.data_gen import get_api
+    from tests.sample_data.mock_api import get_api
 
     data = await get_api("organisations", {"limit": 3})
     return data["organisations"]
