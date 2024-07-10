@@ -83,8 +83,6 @@ class DataAsset:
         if ".json" not in self.path:
             base_path = await self._get_artifact_base_path()
             file_name = await self._get_file_name()
-            print(self.path)
-            print(file_name)
             artifact_path = f"{base_path}/_artifact/{file_name}.json"
             await self._write_operation(artifact_path, output)
 
