@@ -77,7 +77,13 @@ async def test_param_extraction():
     assert offset == 100
 
 
+# Testing outcome of inspect.isasyncgen on return function
+async def test_isasyncgen_on_return():
+    print(inspect.isasyncgen(get_api()))
+
+
 ## Testing functions for ingest_endpoint ##
+
 
 # Testing output type is async_generator
 async def test_iterator_output():
@@ -111,4 +117,4 @@ async def test_iterator_param_extraction():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_iterator_param_extraction())
+    asyncio.run(test_isasyncgen_on_return())

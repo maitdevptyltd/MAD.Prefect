@@ -7,7 +7,7 @@ import httpx
 import mad_prefect.filesystems
 
 # Override the environment variable before importing register_mad_filesystem
-mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests/synthetic_data"
+mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests/sample_data"
 
 
 async def ingest_endpoint(
