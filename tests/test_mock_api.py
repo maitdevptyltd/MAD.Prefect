@@ -2,6 +2,10 @@ import asyncio
 import inspect
 import httpx
 from tests.sample_data.mock_api import generate_data, get_api, ingest_endpoint
+import mad_prefect.filesystems
+
+# Override the environment variable before importing register_mad_filesystem
+mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests/sample_data"
 
 
 ## Test functions for generate_data ##

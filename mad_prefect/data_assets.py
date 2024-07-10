@@ -3,6 +3,7 @@ import inspect
 from typing import Callable
 import duckdb
 import httpx
+import pandas
 from mad_prefect.filesystems import get_fs
 from mad_prefect.duckdb import register_mad_protocol
 import re
@@ -13,10 +14,10 @@ mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests/sample_data"
 
 
 class DataAsset:
-    def __init__(self, fn: Callable, path: str, artifacts_path: str | None = None):
+    def __init__(self, fn: Callable, path: str, artifacts_dir: str | None = None):
         self.__fn = fn
         self.path = path
-        self.artifacts_path = artifacts_path
+        self.artifacts_dir = artifacts_dir
         self.name = fn.__name__
         self.last_refreshed = None
 
@@ -39,18 +40,17 @@ class DataAsset:
         fragment_number = 1
 
         # Extract root path for folder set up
-        root_path = re.sub(r"[^/\\]+$", "", self.path)
-        fs.mkdirs(root_path, exist_ok=True)
+        root_path = await self.get_root_path(self.path)
 
         # Set up the base path for artifact storage
-        if not self.artifacts_path:
-            # Remove end filename & extension for self.path
+        if not self.artifacts_dir:
             base_path = root_path
         else:
-            base_path = self.artifacts_path
+            base_path = self.artifacts_dir
 
         async for output in self.__fn(*args, **kwargs):
             if isinstance(output, httpx.Response):
+
                 # If API response has params use these in filepath for hive partitioning
                 if output.request.url.params:
                     params_path = self._build_params_path(
@@ -62,14 +62,11 @@ class DataAsset:
                 else:
                     path = f"{base_path}/_artifacts/fragment={fragment_number}.json"
 
-                data = output.json() if output.json() else output.text
-
             # If output is not httpx.Response use fragment number for hive partitioning
             else:
                 path = f"{base_path}/_artifacts/fragment={fragment_number}.json"
-                data = output
 
-            await fs.write_data(path, data)
+            await self._write_operation(path, output)
 
             # Update fragment_number if used in path
             fragment_number = (
@@ -90,26 +87,8 @@ class DataAsset:
     async def _handle_return(self, *args, **kwargs):
         output = await self.__fn(*args, **kwargs)
 
-        # Set up filesystem abstraction
-        fs = await get_fs()
-        await register_mad_protocol()
-
-        if isinstance(output, httpx.Response):
-            data = output.json() if output.json() else output.text
-            await fs.write_data(self.path, data)
-
-        elif isinstance(output, duckdb.DuckDBPyRelation):
-            duckdb.query("SET temp_directory = './.tmp/duckdb/'")
-            duckdb.query(
-                f"""
-                    COPY(
-                        SELECT * FROM {output}
-                    ) TO 'mad://{self.path}' (use_tmp_file false)
-                """
-            )
-
-        else:
-            await fs.write_data(self.path, output)
+        # TODO: insert logic for artifact/raw data write
+        await self._write_operation(self.path, output)
 
     def _build_params_path(
         self,
@@ -142,14 +121,47 @@ class DataAsset:
 
         return path
 
-    async def query(self):
+    async def _write_operation(self, path, data):
+        fs = await get_fs()
+        await register_mad_protocol()
+        await self.get_root_path(path)
+
+        if isinstance(data, (duckdb.DuckDBPyRelation, pandas.DataFrame)):
+            duckdb.query("SET temp_directory = './.tmp/duckdb/'")
+            duckdb.query(
+                f"""
+                    COPY(
+                        SELECT * FROM data
+                    ) TO 'mad://{path}' (use_tmp_file false)
+                """
+            )
+        elif isinstance(data, httpx.Response):
+            output = data.json() if data.json() else data.text
+            await fs.write_data(path, output)
+        else:
+            await fs.write_data(path, data)
+
+    async def query(self, query_str: str | None = None):
         # TODO: query shouldn't __call__ every time to materialize the asset for querying, in the future develop
         # a way to rematerialize an asset only if its required (doesn't exist) or has expired.
         await self()
 
         await register_mad_protocol()
 
-        return duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
+        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
+        duckdb.register("asset", asset_query)
+
+        if not query_str:
+            return duckdb.query("SELECT * FROM asset")
+
+        return duckdb.query(query_str)
+
+    async def get_root_path(self, path):
+        fs = await get_fs()
+        root_path = re.sub(r"[^/\\]+$", "", path)
+        fs.mkdirs(root_path, exist_ok=True)
+
+        return root_path
 
     def __getstate__(self):
         pass
@@ -158,8 +170,8 @@ class DataAsset:
         pass
 
 
-def asset(path: str, artifacts_path: str | None = None):
+def asset(path: str, artifacts_dir: str | None = None):
     def decorator(fn: Callable):
-        return DataAsset(fn, path, artifacts_path)
+        return DataAsset(fn, path, artifacts_dir)
 
     return decorator
