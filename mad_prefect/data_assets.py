@@ -39,32 +39,20 @@ class DataAsset:
         # Set up starting fragment_number
         fragment_number = 1
 
-        # Extract root path for folder set up
-        root_path = await self.get_root_path(self.path)
-
-        # Set up the base path for artifact storage
-        if not self.artifacts_dir:
-            base_path = root_path
-        else:
-            base_path = self.artifacts_dir
+        # Extract artifact base path
+        base_path = await self._get_artifact_base_path()
 
         async for output in self.__fn(*args, **kwargs):
             if isinstance(output, httpx.Response):
-
-                # If API response has params use these in filepath for hive partitioning
-                if output.request.url.params:
-                    params_path = self._build_params_path(
-                        dict(output.request.url.params)
-                    )
-                    path = f"{base_path}/_artifacts/{params_path}.json"
-
-                # If there aren't params use fragment number for hive partitioning
-                else:
-                    path = f"{base_path}/_artifacts/fragment={fragment_number}.json"
-
-            # If output is not httpx.Response use fragment number for hive partitioning
+                params = (
+                    dict(output.request.url.params)
+                    if output.request.url.params
+                    else None
+                )
             else:
-                path = f"{base_path}/_artifacts/fragment={fragment_number}.json"
+                params = None
+
+            path = self._build_artifact_path(base_path, params, fragment_number)
 
             await self._write_operation(path, output)
 
@@ -85,22 +73,20 @@ class DataAsset:
         )
 
     async def _handle_return(self, *args, **kwargs):
+        # Call function to recieve output
         output = await self.__fn(*args, **kwargs)
 
-        # TODO: insert logic for artifact/raw data write
+        # Write output file to provided path
         await self._write_operation(self.path, output)
 
-    def _build_params_path(
-        self,
-        params: dict | None = None,
-    ):
-
-        params_path = (
-            "/".join(f"{key}={value}" for key, value in params.items())
-            if params
-            else ""
-        )
-        return params_path
+        # Write raw json file to appropriate location
+        if ".json" not in self.path:
+            base_path = await self._get_artifact_base_path()
+            file_name = await self._get_file_name()
+            print(self.path)
+            print(file_name)
+            artifact_path = f"{base_path}/_artifact/{file_name}.json"
+            await self._write_operation(artifact_path, output)
 
     def _build_artifact_path(
         self,
@@ -108,23 +94,18 @@ class DataAsset:
         params: dict | None = None,
         fragment_number: int | None = None,
     ):
-        params_path = (
-            "/".join(f"{key}={value}" for key, value in params.items())
-            if params
-            else ""
-        )
 
-        if params_path:
-            path = f"{base_path}/_artifacts/{params_path}.json"
-        else:
-            path = f"{base_path}/_artifacts/fragment={fragment_number}.json"
+        if params is None:
+            return f"{base_path}/_artifacts/fragment={fragment_number}.json"
 
-        return path
+        params_path = "/".join(f"{key}={value}" for key, value in params.items())
+
+        return f"{base_path}/_artifacts/{params_path}.json"
 
     async def _write_operation(self, path, data):
         fs = await get_fs()
         await register_mad_protocol()
-        await self.get_root_path(path)
+        await self._get_folder_path(path)
 
         if isinstance(data, (duckdb.DuckDBPyRelation, pandas.DataFrame)):
             duckdb.query("SET temp_directory = './.tmp/duckdb/'")
@@ -136,6 +117,7 @@ class DataAsset:
                 """
             )
         elif isinstance(data, httpx.Response):
+            # TODO: Find way to process raw text responses
             output = data.json() if data.json() else data.text
             await fs.write_data(path, output)
         else:
@@ -156,12 +138,27 @@ class DataAsset:
 
         return duckdb.query(query_str)
 
-    async def get_root_path(self, path):
+    async def _get_folder_path(self, path):
         fs = await get_fs()
-        root_path = re.sub(r"[^/\\]+$", "", path)
-        fs.mkdirs(root_path, exist_ok=True)
+        folder_path = re.sub(r"[^/\\]+$", "", path)
+        fs.mkdirs(folder_path, exist_ok=True)
 
-        return root_path
+        return folder_path
+
+    async def _get_artifact_base_path(self):
+        # Extract folder path for folder set up
+        folder_path = await self._get_folder_path(self.path)
+
+        # Set up the base path for artifact storage
+        if not self.artifacts_dir:
+            base_path = folder_path
+        else:
+            base_path = self.artifacts_dir
+
+        return base_path
+
+    async def _get_file_name(self):
+        return re.search(r"([^\\/]+)(?=\.[^\\/\.]+$)", self.path).group(1)
 
     def __getstate__(self):
         pass
