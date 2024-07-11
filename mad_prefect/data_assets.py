@@ -7,10 +7,9 @@ import pandas
 from mad_prefect.filesystems import get_fs
 from mad_prefect.duckdb import register_mad_protocol
 import re
-import mad_prefect.filesystems
+import os
 
-# Override the environment variable before importing register_mad_filesystem
-mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests/sample_data"
+FILESYSTEM_URL = os.getenv("FILESYSTEM_URL", "file://./.tmp/storage")
 
 
 class DataAsset:
@@ -30,6 +29,24 @@ class DataAsset:
         else:
             await self._handle_return(*args, **kwargs)
         self.last_refreshed = datetime.utcnow()
+
+    async def query(self, query_str: str | None = None):
+        # TODO: query shouldn't __call__ every time to materialize the asset for querying, in the future develop
+        # a way to rematerialize an asset only if its required (doesn't exist) or has expired.
+        await self()
+
+        await register_mad_protocol()
+
+        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
+        duckdb.register("asset", asset_query)
+
+        if not query_str:
+            return duckdb.query("SELECT * FROM asset")
+
+        return duckdb.query(query_str)
+
+    def get_asset_path(self):
+        return self.path
 
     async def _handle_yield(self, *args, **kwargs):
         # Set up filesystem abstraction
@@ -120,21 +137,6 @@ class DataAsset:
             await fs.write_data(path, output)
         else:
             await fs.write_data(path, data)
-
-    async def query(self, query_str: str | None = None):
-        # TODO: query shouldn't __call__ every time to materialize the asset for querying, in the future develop
-        # a way to rematerialize an asset only if its required (doesn't exist) or has expired.
-        await self()
-
-        await register_mad_protocol()
-
-        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
-        duckdb.register("asset", asset_query)
-
-        if not query_str:
-            return duckdb.query("SELECT * FROM asset")
-
-        return duckdb.query(query_str)
 
     async def _get_folder_path(self, path):
         fs = await get_fs()
