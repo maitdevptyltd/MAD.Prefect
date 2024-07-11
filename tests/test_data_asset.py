@@ -2,6 +2,7 @@ import asyncio
 import duckdb
 from mad_prefect.data_assets import asset
 from tests.sample_data.mock_api import get_api, ingest_endpoint
+from mad_prefect.filesystems import get_fs
 import mad_prefect.filesystems
 import pandas as pd
 import os
@@ -9,7 +10,7 @@ import os
 
 FILESYSTEM_URL = os.getenv("FILESYSTEM_URL", "file://./.tmp/storage")
 
-## Fixtures ##
+## FIXTURES ##
 
 
 # Fixture 1
@@ -121,7 +122,133 @@ async def asset_bronze_plants_unnested_df():
     return unnested_plants_query.df()
 
 
-async def run_fixtures():
+## TESTS ##
+
+
+# Test 1
+# Fixture: 1
+# Function Name: test_returned_orgs_artifact
+# Purpose: Test existence of artifact at default path & ensure no data loss
+# Acceptance Criteria:
+# 1. Ensure ____ JSON key is accessible
+async def test_returned_orgs_artifact():
+    fs = await get_fs()
+    artifact = await fs.read_data("path")
+
+
+# Test 2
+# Fixture: 1
+# Function Name: test_returned_orgs_output
+# Purpose: Test existence of output at specified path & ensure no data loss
+# Acceptance Criteria:
+# 1. Read file and confirm row_count =
+
+# Test 3
+# Fixture: 2
+# Function Name: test_yielded_buildings_artifacts_path
+# Purpose: Ensure params based hive partitioned file paths have been created
+# Acceptance Criteria:
+# 1. Confirm file paths are as below:
+
+# Test 4
+# Fixture: 2
+# Function Name: test_yielded_buildings_artifact
+# Purpose: Ensure no artifact data loss
+# Acceptance Criteria:
+# 1. Ensure ____ JSON key is accessible in first artifact
+
+# Test 5
+# Fixture: 2
+# Function Name: test_yielded_buildings_output
+# Purpose: Test existence of output at specified path, ensure no data loss & confirm partition columns
+# Acceptance Criteria:
+# 1. Read file and confirm row_count =
+# 2. Confirm "offset" and "limit" column exist in output parquet
+
+# Test 6
+# Fixture: 3
+# Function Name: test_yielded_plants_artifacts_path
+# Purpose: Ensure fragment based hive partitioned file paths have been created
+# Acceptance Criteria:
+# 1. Confirm file paths are as below:
+
+# Test 7
+# Fixture: 3
+# Function Name: test_yielded_plants_artifact
+# Purpose: Ensure no artifact data loss
+# Acceptance Criteria:
+# 1. Ensure ____ JSON key is accessible in last artifact
+
+# Test 8
+# Fixture: 3
+# Function Name: test_yielded_plants_output
+# Purpose: Test existence of output at specified path, ensure no data loss & confirm partition column
+# Acceptance Criteria:
+# 1. Read file and confirm row_count =
+# 2. Confirm "fragment" column exists in output parquet
+
+# Test 9
+# Fixture: 4
+# Function Name: test_yielded_orgs_artifacts_path
+# Purpose: Ensure fragment based hive partitioned file paths have been created
+# Acceptance Criteria:
+# 1. Confirm file paths are as below:
+
+# Test 10
+# Fixture: 4
+# Function Name: test_yielded_orgs_output
+# Purpose: Test existence of output at specified path, ensure no data loss & confirm partition columns
+# Acceptance Criteria:
+# 1. Read file and confirm row_count =
+# 2. Confirm "fragment" column exists in output parquet
+
+# Test 11
+# Fixture: 5
+# Function Name: test_yielded_pelicans_artifacts_path
+# Purpose: Ensure fragment based hive partitioned file paths have been created in custom directory
+# Acceptance Criteria:
+# 1. Confirm file paths are as below:
+
+# Test 12
+# Fixture: 5
+# Function Name: test_yielded_pelicans_output
+# Purpose: Test existence of output at specified path, ensure no data loss & confirm partition column
+# Acceptance Criteria:
+# 1. Read file and confirm row_count =
+# 2. Confirm "fragment" column exists in output parquet
+
+# Test 13
+# Fixture: 6
+# Function Name: test_unnest_buildings_artifact
+# Purpose: Test existence of artifact at default path & ensure no data loss
+# Acceptance Criteria:
+# 1. Ensure ____ JSON key is accessible
+
+# Test 14
+# Fixture: 6
+# Function Name: test_unnest_buildings_output
+# Purpose: Test existence of output at specified path, ensure no data loss & column structure
+# Acceptance Criteria:
+# 1. Read file and confirm row_count =
+# 2. Confirm column structure is as below:
+
+# Test 15
+# Fixture: 7
+# Function Name: test_unnest_plants_artifact
+# Purpose: Test existence of artifact at custom path & ensure no data loss
+# Acceptance Criteria:
+# 1. Ensure ____ JSON key is accessible
+
+# Test 16
+# Fixture: 7
+# Function Name: test_unnest_plants_output
+# Purpose: Test existence of output at specified path, ensure no data loss & column structure
+# Acceptance Criteria:
+# 1. Read file and confirm row_count =
+# 2. Confirm column structure is as below:
+
+
+async def test_run_fixtures():
     await asset_bronze_organisations_return()
     await asset_bronze_buildings_yielded_response()
     await asset_bronze_plants_yielded_response()
