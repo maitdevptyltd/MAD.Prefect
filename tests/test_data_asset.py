@@ -242,11 +242,6 @@ async def test_return_json_output(fixture_1):
 
 
 # Test 3
-# Fixture: 2
-# Function Name: test_yielded_buildings_artifacts_path
-# Purpose: Ensure params based hive partitioned file paths have been created
-# Acceptance Criteria:
-# 1. Confirm file paths are as below:
 async def test_yield_response_with_params_artifacts(fixture_2):
     """
     Tests artifacts have been successfully created with params based file paths
@@ -280,11 +275,49 @@ async def test_yield_response_with_params_artifacts(fixture_2):
 
 
 # Test 4
-# Fixture: 2
-# Function Name: test_yielded_buildings_artifact
-# Purpose: Ensure no artifact data loss
-# Acceptance Criteria:
-# 1. Ensure ____ JSON key is accessible in first artifact
+async def test_yield_response_with_params_output(fixture_2):
+    """
+    Tests output have been successfully constructed with hive partition columns
+
+    Fixture Purpose: Test writing httpx.Response's with yield, to params based file paths
+
+    Acceptance Criteria:
+    1. Output file exists
+    2. Has correct columns
+    3. Has correct record count
+
+    """
+    fs = await get_fs()
+    await register_mad_protocol()
+    parquet_paths = fs.glob("fixture_2/**/*.parquet")
+    expected_path = "fixture_2/bronze/buildings_yielded/buildings_api-response.parquet"
+    expected_record_count = 267
+    expected_columns = [
+        "api_version",
+        "timestamp",
+        "record_count",
+        "offset",
+        "buildings",
+        "limit",
+    ]
+
+    assert (
+        expected_path in parquet_paths
+    ), f"Expected output path: {expected_path} \n Not found in glob: {parquet_paths}"
+
+    output = duckdb.query(f"SELECT * FROM 'mad://{expected_path}'")
+    columns = output.columns
+
+    assert (
+        columns == expected_columns
+    ), f"Output columns: {columns} \n Did not match expected columns: {expected_columns}"
+
+    record_count = duckdb.query("SELECT SUM(record_count) FROM output").fetchone()[0]
+
+    assert (
+        record_count == expected_record_count
+    ), f"Output record_count: {record_count}, did not match expected {expected_record_count}"
+
 
 # Test 5
 # Fixture: 2
