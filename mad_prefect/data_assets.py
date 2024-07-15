@@ -123,12 +123,13 @@ class DataAsset:
         await self._get_folder_path(path)
 
         if isinstance(data, (duckdb.DuckDBPyRelation, pandas.DataFrame)):
+            json_format = "FORMAT JSON, ARRAY true," if ".json" in path else ""
             duckdb.query("SET temp_directory = './.tmp/duckdb/'")
             duckdb.query(
                 f"""
                     COPY(
                         SELECT * FROM data
-                    ) TO 'mad://{path}' (use_tmp_file false)
+                    ) TO 'mad://{path}' ({json_format} use_tmp_file false)
                 """
             )
         elif isinstance(data, httpx.Response):

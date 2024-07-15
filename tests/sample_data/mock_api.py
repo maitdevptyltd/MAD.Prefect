@@ -105,7 +105,6 @@ async def generate_data(
         "api_version": "1.0",
         "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "record_count": record_count,
-        "offset": params["offset"],
         endpoint: [],
     }
 
