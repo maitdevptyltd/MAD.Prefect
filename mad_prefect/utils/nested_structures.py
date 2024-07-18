@@ -293,7 +293,9 @@ async def extract_nested_tables(
             if query:
                 # data = query.df()
                 # await fs.write_data(f"bronze/{folder}/{prefixed_field}.parquet", data)
-                query.to_parquet(f"mad://bronze/{folder}/{prefixed_field}.parquet")
+                duckdb.execute(
+                    f"COPY query TO 'mad://bronze/{folder}/{prefixed_field}.parquet' (use_tmp_file false)"
+                )
                 next_level_fields.append(field)
             else:
                 print(
