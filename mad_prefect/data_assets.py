@@ -38,10 +38,10 @@ class DataAsset:
         await register_mad_protocol()
 
         asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
-        duckdb.register("asset", asset_query)
+        duckdb.register(self.name, asset_query)
 
         if not query_str:
-            return duckdb.query("SELECT * FROM asset")
+            return duckdb.query(f"SELECT * FROM {self.name}")
 
         return duckdb.query(query_str)
 

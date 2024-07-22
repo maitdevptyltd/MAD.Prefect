@@ -148,10 +148,10 @@ async def asset_bronze_buildings_unnested_query():
     """
     nested_buildings = asset_bronze_buildings_yielded_response
 
-    # .query() method creates DuckDB view named 'asset'
-    # When using query_str use 'asset' in FROM clause as below
+    # .query() method creates DuckDB view named identically to the original asset function
+    # When using query_str use the asset name in FROM clause as below
     unnested_buildings_query = await nested_buildings.query(
-        "SELECT UNNEST(buildings, max_depth:=2) FROM asset"
+        "SELECT UNNEST(buildings, max_depth:=2) FROM asset_bronze_buildings_yielded_response"
     )
     return unnested_buildings_query
 
@@ -177,10 +177,10 @@ async def asset_bronze_plants_unnested_df():
     """
     nested_plants = asset_bronze_plants_yielded_response
 
-    # .query() method creates DuckDB view named 'asset'
-    # When using query_str use 'asset' in FROM clause as below
+    # .query() method creates DuckDB view named identically to the original asset function
+    # When using query_str use the asset name in FROM clause as below
     unnested_plants_query = await nested_plants.query(
-        "SELECT UNNEST(plants, max_depth:=2) FROM asset"
+        "SELECT UNNEST(plants, max_depth:=2) FROM asset_bronze_plants_yielded_response"
     )
     return unnested_plants_query.df()
 
@@ -608,3 +608,56 @@ async def test_pd_dataframe_output(fixture_7):
     record_count = duckdb.query("SELECT COUNT(*) FROM output").fetchone()[0]
 
     assert record_count == expected_record_count
+
+
+# Test 14
+async def test_multiple_asset_queries():
+    """
+    Tests the use of multiple asset queries and their use in subsequent duckdb queries.
+
+    Fixture Purpose: This test does not use a fixture.
+
+    Acceptance Criteria:
+    1. Ensure that the .query() method produces expected columns with query string.
+    2. Ensure that the .query() method produces expected columns without query string.
+    3. Verify that queries do not overwrite one another and can be used in subsequent duckdb queries
+    """
+    expected_plant_columns = [
+        "api_version",
+        "timestamp",
+        "record_count",
+        "plants",
+        "fragment",
+    ]
+    expected_building_columns = [
+        "api_version",
+        "timestamp",
+        "record_count",
+        "buildings",
+        "limit",
+        "offset",
+    ]
+    expected_merge_columns = ["plants", "buildings"]
+
+    plants = await asset_bronze_plants_yielded_response.query(
+        "SELECT * FROM asset_bronze_plants_yielded_response"
+    )
+
+    buildings = await asset_bronze_buildings_yielded_response.query()
+
+    merge = duckdb.query(
+        """
+        SELECT 
+            p.plants,
+            b.buildings
+        FROM plants p
+        LEFT JOIN buildings b
+            ON p.api_version = b.api_version
+        """
+    )
+
+    assert plants.columns == expected_plant_columns
+
+    assert buildings.columns == expected_building_columns
+
+    assert merge.columns == expected_merge_columns
