@@ -1,7 +1,6 @@
 import asyncio
 from datetime import datetime
 import duckdb
-
 from mad_prefect.data_assets import asset
 import mad_prefect.data_assets
 from mad_prefect.duckdb import register_mad_protocol
@@ -188,6 +187,70 @@ async def asset_bronze_plants_unnested_df():
 @pytest.fixture(scope="session")
 def fixture_7():
     asyncio.run(asset_bronze_plants_unnested_df())
+
+
+@asset(f"fixture_8/bronze/returned/none.parquet")
+async def asset_bronze_returned_none():
+    """
+    Fixture 8
+    Purpose: Test write operations for functions that return None
+    Function Name: asset_bronze_returned_none
+    Output Method: Return
+    Data Type: None
+    Params Used: N/A - Other
+    Artifact Storage: Default
+    """
+    return None
+
+
+@pytest.fixture(scope="session")
+def fixture_8():
+    asyncio.run(asset_bronze_returned_none())
+
+
+@asset(f"fixture_9/bronze/yielded/partial_none.parquet")
+async def asset_bronze_yielded_partial_none():
+    """
+    Fixture 9
+    Purpose: Test write operations for functions that yield data but also yield None results
+    Function Name: asset_bronze_yielded_partial_none
+    Output Method: Yield
+    Data Type: None / httpx.Response
+    Params Used: No
+    Artifact Storage: Default
+    """
+    yield None
+    yield await get_api("nones", return_type="api_response")
+    yield None
+
+
+@pytest.fixture(scope="session")
+def fixture_9():
+    asyncio.run(asset_bronze_yielded_partial_none())
+
+
+@asset(
+    f"fixture_10/bronze/yielded/fully_none.parquet",
+    artifacts_dir="fixture_10/raw/nones",
+)
+async def asset_bronze_yielded_fully_none():
+    """
+    Fixture 10
+    Purpose: Test write operations for functions that only yield  None results
+    Function Name: asset_bronze_yielded_fully_none
+    Output Method: Yield
+    Data Type: None
+    Params Used: N/A - Other
+    Artifact Storage: Custom
+    """
+    yield None
+    yield None
+    yield None
+
+
+@pytest.fixture(scope="session")
+def fixture_10():
+    asyncio.run(asset_bronze_yielded_fully_none())
 
 
 ## TESTS ##
@@ -587,8 +650,9 @@ async def test_pd_dataframe_output(fixture_7):
     """
     fs = await get_fs()
     await register_mad_protocol()
-    parquet_paths = fs.glob("fixture_7/**/*.parquet")
     expected_path = "fixture_7/bronze/plants_unnested/plants_unnested_df.parquet"
+    matching_path = fs.glob(expected_path)
+
     expected_record_count = 30
     expected_columns = [
         "plant_id",
@@ -598,7 +662,7 @@ async def test_pd_dataframe_output(fixture_7):
         "reviews",
     ]
 
-    assert expected_path in parquet_paths
+    assert matching_path
 
     output = duckdb.query(f"SELECT * FROM 'mad://{expected_path}'")
     columns = output.columns
@@ -661,3 +725,89 @@ async def test_multiple_asset_queries():
     assert buildings.columns == expected_building_columns
 
     assert merge.columns == expected_merge_columns
+
+
+# Test 15
+async def test_returned_none(fixture_8):
+    """
+    Tests the outcome of return functions that return None and subsequent .query method
+
+    Fixture Purpose: Test write operations for functions that return None
+
+    Acceptance Criteria:
+    1. No file is created
+    2. No errors occur during fixture creation
+    3. .query method results in None where asset isn't created
+    """
+    fs = await get_fs()
+    expected_path = "fixture_8/bronze/returned/none.parquet"
+    matching_path = fs.glob(expected_path)
+
+    # Assert no file is created
+    assert not matching_path
+
+    none_query = await asset_bronze_returned_none.query()
+
+    assert none_query is None
+
+
+# Test 16
+async def test_partial_yield(fixture_9):
+    """
+    Tests the outcomes of write operations for functions that yield data but also yield None results
+
+    Fixture Purpose: Test write operations for functions that yield data but also yield None results
+
+    Acceptance Criteria:
+    1. Correct number of artifacts are created
+    2. Output is successfully created
+    3. Output has correct number of rows
+    """
+    fs = await get_fs()
+    artifact_paths = fs.glob("fixture_9/**/*.json")
+    expected_output_path = "fixture_9/bronze/yielded/partial_none.parquet"
+    matching_output_path = fs.glob(expected_output_path)
+
+    # Confirm 1 artifact has been created
+    assert len(artifact_paths) == 1
+
+    # Confirm output has been created
+    assert matching_output_path
+
+    nones_query = await asset_bronze_yielded_partial_none.query(
+        "SELECT COUNT(*) FROM asset_bronze_yielded_partial_none"
+    )
+
+    nones_row_count = nones_query.fetchone()[0]
+
+    # Confirm output has correct number of rows
+    assert nones_row_count == 1
+
+
+# Test 15
+async def test_yield_none(fixture_10):
+    """
+    Test write operations for functions that only yield None results and subsequent .query method
+
+     Fixture Purpose: Test write operations for functions that only yield  None results
+
+     Acceptance Criteria:
+     1. No artifact is created
+     2. No output is created
+     2. No errors occur during fixture creation
+     3. .query method results in None where asset isn't created
+    """
+    fs = await get_fs()
+    artifact_paths = fs.glob("fixture_10/**/*.json")
+    expected_path = "fixture_10/bronze/yielded/fully_none.parquet"
+    matching_path = fs.glob(expected_path)
+
+    # Assert no artifacts are created
+    assert not artifact_paths
+
+    # Assert no output file is created
+    assert not matching_path
+
+    none_query = await asset_bronze_yielded_fully_none.query()
+
+    assert none_query is None

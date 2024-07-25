@@ -19,6 +19,7 @@ class DataAsset:
         self.artifacts_dir = artifacts_dir
         self.name = fn.__name__
         self.last_refreshed = None
+        self.last_materialized = None
 
         pass
 
@@ -35,15 +36,21 @@ class DataAsset:
         # a way to rematerialize an asset only if its required (doesn't exist) or has expired.
         await self()
 
+        # Set up filesystem abstraction
+        fs = await get_fs()
         await register_mad_protocol()
 
-        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
-        duckdb.register(self.name, asset_query)
+        # # If asset has been created query the file
+        if fs.glob(self.path):
+            asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
+            duckdb.register(self.name, asset_query)
 
-        if not query_str:
-            return duckdb.query(f"SELECT * FROM {self.name}")
+            if not query_str:
+                return duckdb.query(f"SELECT * FROM {self.name}")
 
-        return duckdb.query(query_str)
+            return duckdb.query(query_str)
+        else:
+            return None
 
     def get_asset_path(self):
         return self.path
@@ -60,48 +67,56 @@ class DataAsset:
         base_path = await self._get_artifact_base_path()
 
         async for output in self.__fn(*args, **kwargs):
-            if isinstance(output, httpx.Response):
-                params = (
-                    dict(output.request.url.params)
-                    if output.request.url.params
-                    else None
+            if output is not None:
+                if isinstance(output, httpx.Response):
+                    params = (
+                        dict(output.request.url.params)
+                        if output.request.url.params
+                        else None
+                    )
+                else:
+                    params = None
+
+                path = self._build_artifact_path(base_path, params, fragment_number)
+
+                await self._write_operation(path, output)
+
+                # Update fragment_number if used in path
+                fragment_number = (
+                    (fragment_number + 1) if "fragment=" in path else fragment_number
                 )
-            else:
-                params = None
 
-            path = self._build_artifact_path(base_path, params, fragment_number)
+        # If artifacts have been created then create output parquet
+        if fs.glob(f"{base_path}/_artifacts/**/*.json"):
+            duckdb.query("SET temp_directory = './.tmp/duckdb/'")
+            duckdb.query(
+                f"""
+                    COPY (
+                    SELECT *
+                    FROM read_json_auto('mad://{base_path}/_artifacts/**/*.json', hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
+                    ) TO 'mad://{self.path}' (use_tmp_file false)
 
-            await self._write_operation(path, output)
-
-            # Update fragment_number if used in path
-            fragment_number = (
-                (fragment_number + 1) if "fragment=" in path else fragment_number
+                """
             )
-
-        duckdb.query("SET temp_directory = './.tmp/duckdb/'")
-        duckdb.query(
-            f"""
-                COPY (
-                SELECT *
-                FROM read_json_auto('mad://{base_path}/_artifacts/**/*.json', hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
-                ) TO 'mad://{self.path}' (use_tmp_file false)
-
-            """
-        )
+            self.last_materialized = datetime.utcnow()
 
     async def _handle_return(self, *args, **kwargs):
         # Call function to recieve output
         output = await self.__fn(*args, **kwargs)
 
-        # Write output file to provided path
-        await self._write_operation(self.path, output)
+        # If nothing is return do not perform write operation
+        if output is not None:
+            # Write output file to provided path
+            await self._write_operation(self.path, output)
 
-        # Write raw json file to appropriate location
-        if ".json" not in self.path:
-            base_path = await self._get_artifact_base_path()
-            file_name = await self._get_file_name()
-            artifact_path = f"{base_path}/_artifact/{file_name}.json"
-            await self._write_operation(artifact_path, output)
+            # Write raw json file to appropriate location
+            if ".json" not in self.path:
+                base_path = await self._get_artifact_base_path()
+                file_name = await self._get_file_name()
+                artifact_path = f"{base_path}/_artifact/{file_name}.json"
+                await self._write_operation(artifact_path, output)
+
+            self.last_materialized = datetime.utcnow()
 
     def _build_artifact_path(
         self,
