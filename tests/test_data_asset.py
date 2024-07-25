@@ -784,7 +784,7 @@ async def test_partial_yield(fixture_9):
     assert nones_row_count == 1
 
 
-# Test 15
+# Test 17
 async def test_yield_none(fixture_10):
     """
     Test write operations for functions that only yield None results and subsequent .query method
