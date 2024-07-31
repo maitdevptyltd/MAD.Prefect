@@ -200,7 +200,7 @@ async def asset_bronze_returned_none():
     Params Used: N/A - Other
     Artifact Storage: Default
     """
-    return None
+    pass
 
 
 @pytest.fixture(scope="session")
@@ -219,9 +219,9 @@ async def asset_bronze_yielded_partial_none():
     Params Used: No
     Artifact Storage: Default
     """
-    yield None
+    yield
     yield await get_api("nones", return_type="api_response")
-    yield None
+    yield
 
 
 @pytest.fixture(scope="session")
@@ -243,9 +243,9 @@ async def asset_bronze_yielded_fully_none():
     Params Used: N/A - Other
     Artifact Storage: Custom
     """
-    yield None
-    yield None
-    yield None
+    yield
+    yield
+    yield
 
 
 @pytest.fixture(scope="session")
