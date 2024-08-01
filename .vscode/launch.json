@@ -9,18 +9,6 @@
             "code": "import runpy; runpy.run_module(r'${relativeFileDirname}'.replace('\\\\', '.') + r'.${fileBasenameNoExtension}', run_name='__main__')",
             "cwd": "${workspaceFolder}",
             "justMyCode": false
-        },
-        {
-            "name": "Python: Debug Tests",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "purpose": [
-                "debug-test"
-            ],
-            "console": "internalConsole",
-            "cwd": "${workspaceFolder}",
-            "justMyCode": false
         }
     ]
 }

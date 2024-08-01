@@ -1,7 +1,7 @@
 from datetime import datetime
 import hashlib
 import inspect
-from typing import Callable
+from typing import Callable, cast
 import duckdb
 import httpx
 import pandas
@@ -18,7 +18,7 @@ class DataAsset:
         self,
         fn: Callable,
         path: str,
-        artifacts_dir: str | None = None,
+        artifacts_dir: str | None = "",
         name: str | None = None,
     ):
         self.__fn = fn
@@ -27,7 +27,7 @@ class DataAsset:
         self.name = name if name else fn.__name__
         self.fn_name = fn.__name__
         self.fn_signature = inspect.signature(fn)
-        self.last_refreshed = None
+        self.runtime = None
         self.last_materialized = None
 
         pass
@@ -36,12 +36,12 @@ class DataAsset:
         # Wrap args into dictionary
         self.args = self.fn_signature.bind(*args, **kwargs)
         self.args.apply_defaults()
-        self.args = dict(self.args.arguments)
+        self.args_dict = dict(self.args.arguments)
 
-        # Resolve path, artifacts_dir, name to resolve template values
-        self.path = self._resolve_attribute(self.path)
-        self.artifacts_dir = self._resolve_attribute(self.artifacts_dir)
-        self.name = self._resolve_attribute(self.name)
+        # Resolve (path, artifacts_dir, name) to insert template values
+        self.resolved_path = self._resolve_attribute(self.path)
+        self.resolved_artifacts_dir = self._resolve_attribute(self.artifacts_dir)
+        self.resolved_name = self._resolve_attribute(self.name)
 
         if inspect.isasyncgen(self.__fn(*args, **kwargs)):
             await self._handle_yield(*args, **kwargs)
@@ -50,7 +50,7 @@ class DataAsset:
 
         # Generate identifiers and write metadata
         self.id = self._generate_asset_guid()
-        self.iteration_id = self._generate_asset_iteration_guid()
+        self.run_id = self._generate_asset_iteration_guid()
         await self.__register_asset()
 
     async def query(self, query_str: str | None = None):
@@ -63,15 +63,15 @@ class DataAsset:
         await register_mad_protocol()
 
         # # If asset has been created query the file
-        if fs.glob(self.path):
-            asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
-            duckdb.register(f"{self.name}_{self.id}", asset_query)
+        if fs.glob(self.resolved_path):
+            asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.resolved_path}'")
+            duckdb.register(f"{self.resolved_name}_{self.id}", asset_query)
 
             if not query_str:
-                return duckdb.query(f"SELECT * FROM {self.name}_{self.id}")
+                return duckdb.query(f"SELECT * FROM {self.resolved_name}_{self.id}")
             else:
                 directed_string = query_str.replace(
-                    "__asset__", f"{self.name}_{self.id}"
+                    "__asset__", f"{self.resolved_name}_{self.id}"
                 )
 
             return duckdb.query(directed_string)
@@ -79,7 +79,7 @@ class DataAsset:
             return None
 
     def get_asset_path(self):
-        return self.path
+        return self.resolved_path
 
     async def _handle_yield(self, *args, **kwargs):
         # Set up filesystem abstraction
@@ -120,7 +120,7 @@ class DataAsset:
                     COPY (
                     SELECT *
                     FROM read_json_auto('mad://{base_path}/_artifacts/**/*.json', hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
-                    ) TO 'mad://{self.path}' (use_tmp_file false)
+                    ) TO 'mad://{self.resolved_path}' (use_tmp_file false)
 
                 """
             )
@@ -133,10 +133,10 @@ class DataAsset:
         # If nothing is return do not perform write operation
         if output is not None:
             # Write output file to provided path
-            await self._write_operation(self.path, output)
+            await self._write_operation(self.resolved_path, output)
 
             # Write raw json file to appropriate location
-            if ".json" not in self.path:
+            if ".json" not in self.resolved_path:
                 base_path = await self._get_artifact_base_path()
                 file_name = await self._get_file_name()
                 artifact_path = f"{base_path}/_artifact/{file_name}.json"
@@ -189,54 +189,54 @@ class DataAsset:
 
     async def _get_artifact_base_path(self):
         # Extract folder path for folder set up
-        folder_path = await self._get_folder_path(self.path)
+        folder_path = await self._get_folder_path(self.resolved_path)
 
         # Set up the base path for artifact storage
-        if not self.artifacts_dir:
+        if not self.resolved_artifacts_dir:
             base_path = folder_path
         else:
-            base_path = self.artifacts_dir
+            base_path = self.resolved_artifacts_dir
 
         return base_path
 
     async def _get_file_name(self):
-        return re.search(r"([^\\/]+)(?=\.[^\\/\.]+$)", self.path).group(1)
+        return re.search(r"([^\\/]+)(?=\.[^\\/\.]+$)", self.resolved_path).group(1)
 
-    def _resolve_attribute(self, input_str: str | None = None):
+    def _resolve_attribute(self, input_str: str = ""):
         if not input_str:
-            return None
-        if not self.args:
             return input_str
-        param_names = [(f"{{{key}}}", key) for key in list(self.args.keys())]
+        if not self.args_dict:
+            return input_str
+        param_names = [(f"{{{key}}}", key) for key in list(self.args_dict.keys())]
         for key_str, key in param_names:
-            param_value = self.args[f"{key}"]
+            param_value = str(self.args_dict[f"{key}"])
             if param_value:
                 input_str = input_str.replace(key_str, param_value)
         return input_str
 
     def _generate_asset_guid(self):
-        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self.args)}"
+        hash_input = f"{self.resolved_name}:{self.resolved_path}:{self.resolved_artifacts_dir}:{str(self.args)}"
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     def _generate_asset_iteration_guid(self):
-        self.last_refreshed = datetime.utcnow().isoformat()
-        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.last_refreshed}:{str(self.args)}"
+        self.runtime = datetime.utcnow().isoformat()
+        hash_input = f"{self.resolved_name}:{self.resolved_path}:{self.resolved_artifacts_dir}:{self.runtime}:{str(self.args)}"
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     async def __register_asset(self):
         fs = await get_fs()
         asset_metadata = {
-            "iteration_id": self.iteration_id,
-            "id": self.id,
-            "asset_name": self.name,
+            "asset_run_id": self.run_id,
+            "asset_id": self.id,
+            "asset_name": self.resolved_name,
             "fn_name": self.fn_name,
-            "parameters": self.args,
-            "output_path": self.path,
-            "runtime": self.last_refreshed,
+            "parameters": self.args_dict,
+            "output_path": self.resolved_path,
+            "runtime": self.runtime,
         }
 
         await fs.write_data(
-            f"{self.ASSET_METADATA_LOCATION}/asset_name={self.name}/asset_id={self.id}/{self.iteration_id}.json",
+            f"{self.ASSET_METADATA_LOCATION}/asset_name={self.resolved_name}/asset_id={self.id}/{self.run_id}.json",
             asset_metadata,
         )
 
@@ -265,7 +265,7 @@ async def get_asset_metadata():
                 FROM read_json_auto('mad://{ASSET_METADATA_LOCATION}/**/*.json')
                 ORDER BY
                     runtime DESC,
-                    id ASC
+                    asset_id ASC
             """
         )
         return metadata
