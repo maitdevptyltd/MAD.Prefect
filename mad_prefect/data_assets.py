@@ -32,23 +32,23 @@ class DataAsset:
 
         pass
 
-    def _generate_asset_guid(self):
-        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self.args)}"
-        return hashlib.md5(hash_input.encode()).hexdigest()
-
-    def _generate_asset_iteration_guid(self):
-        self.last_refreshed = datetime.utcnow().isoformat()
-        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.last_refreshed}:{str(self.args)}"
-        return hashlib.md5(hash_input.encode()).hexdigest()
-
     async def __call__(self, *args, **kwargs):
+        # Wrap args into dictionary
         self.args = self.fn_signature.bind(*args, **kwargs)
         self.args.apply_defaults()
+        self.args = dict(self.args.arguments)
+
+        # Resolve path, artifacts_dir, name to resolve template values
+        self.path = self._resolve_attribute(self.path)
+        self.artifacts_dir = self._resolve_attribute(self.artifacts_dir)
+        self.name = self._resolve_attribute(self.name)
+
         if inspect.isasyncgen(self.__fn(*args, **kwargs)):
             await self._handle_yield(*args, **kwargs)
         else:
             await self._handle_return(*args, **kwargs)
 
+        # Generate identifiers and write metadata
         self.id = self._generate_asset_guid()
         self.iteration_id = self._generate_asset_iteration_guid()
         await self.__register_asset()
@@ -65,13 +65,13 @@ class DataAsset:
         # # If asset has been created query the file
         if fs.glob(self.path):
             asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
-            duckdb.register(f"{self.name}-{self.guid}", asset_query)
+            duckdb.register(f"{self.name}_{self.id}", asset_query)
 
             if not query_str:
-                return duckdb.query(f"SELECT * FROM {self.name}-{self.guid}")
+                return duckdb.query(f"SELECT * FROM {self.name}_{self.id}")
             else:
                 directed_string = query_str.replace(
-                    "__asset__", f"{self.name}-{self.guid}"
+                    "__asset__", f"{self.name}_{self.id}"
                 )
 
             return duckdb.query(directed_string)
@@ -202,6 +202,27 @@ class DataAsset:
     async def _get_file_name(self):
         return re.search(r"([^\\/]+)(?=\.[^\\/\.]+$)", self.path).group(1)
 
+    def _resolve_attribute(self, input_str: str | None = None):
+        if not input_str:
+            return None
+        if not self.args:
+            return input_str
+        param_names = [(f"{{{key}}}", key) for key in list(self.args.keys())]
+        for key_str, key in param_names:
+            param_value = self.args[f"{key}"]
+            if param_value:
+                input_str = input_str.replace(key_str, param_value)
+        return input_str
+
+    def _generate_asset_guid(self):
+        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self.args)}"
+        return hashlib.md5(hash_input.encode()).hexdigest()
+
+    def _generate_asset_iteration_guid(self):
+        self.last_refreshed = datetime.utcnow().isoformat()
+        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.last_refreshed}:{str(self.args)}"
+        return hashlib.md5(hash_input.encode()).hexdigest()
+
     async def __register_asset(self):
         fs = await get_fs()
         asset_metadata = {
@@ -209,13 +230,14 @@ class DataAsset:
             "id": self.id,
             "asset_name": self.name,
             "fn_name": self.fn_name,
-            "parameters": dict(self.args.arguments),
+            "parameters": self.args,
             "output_path": self.path,
             "runtime": self.last_refreshed,
         }
 
         await fs.write_data(
-            f"{self.ASSET_METADATA_LOCATION}/{self.iteration_id}.json", asset_metadata
+            f"{self.ASSET_METADATA_LOCATION}/asset_name={self.name}/asset_id={self.id}/{self.iteration_id}.json",
+            asset_metadata,
         )
 
     def __getstate__(self):
@@ -236,11 +258,11 @@ async def get_asset_metadata():
     fs = await get_fs()
     await register_mad_protocol()
     ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", ".asset_metadata")
-    if fs.glob(f"{ASSET_METADATA_LOCATION}/*.json"):
+    if fs.glob(f"{ASSET_METADATA_LOCATION}/**/*.json"):
         metadata = duckdb.query(
             f"""
                 SELECT * 
-                FROM read_json_auto('mad://{ASSET_METADATA_LOCATION}/*.json')
+                FROM read_json_auto('mad://{ASSET_METADATA_LOCATION}/**/*.json')
                 ORDER BY
                     runtime DESC,
                     id ASC
