@@ -27,12 +27,16 @@ class DataAsset:
         self.name = name if name else fn.__name__
         self.fn_name = fn.__name__
         self.fn_signature = inspect.signature(fn)
-        self.runtime = None
+        self.runtime_str = None
         self.last_materialized = None
 
         pass
 
     async def __call__(self, *args, **kwargs):
+        # Set runtime
+        self.runtime = datetime.utcnow()
+        self.runtime_str = self.runtime.isoformat().replace(":", "_")
+
         # Wrap args into dictionary
         self.args = self.fn_signature.bind(*args, **kwargs)
         self.args.apply_defaults()
@@ -43,8 +47,19 @@ class DataAsset:
         self.resolved_artifacts_dir = self._resolve_attribute(self.artifacts_dir)
         self.resolved_name = self._resolve_attribute(self.name)
 
-        self.write_operation: bool = False
+        # Set default value for self.data_written to False
+        self.data_written: bool = False
 
+        # TODO: set up function that examines metadata to extract
+        # last_created timestamp
+        # For now use runtime as placeholder
+        self.last_created = self.runtime
+
+        # TODO: in future set up caching that reads from path
+        # Instead of running self.__fn if data
+        # Has been created within cache period
+
+        # Run self.__fn to retrieve function output
         if inspect.isasyncgen(self.__fn(*args, **kwargs)):
             await self._handle_yield(*args, **kwargs)
         else:
@@ -56,8 +71,6 @@ class DataAsset:
         await self.__register_asset()
 
     async def query(self, query_str: str | None = None):
-        # TODO: query shouldn't __call__ every time to materialize the asset for querying, in the future develop
-        # a way to rematerialize an asset only if its required (doesn't exist) or has expired.
         await self()
 
         # Set up filesystem abstraction
@@ -80,9 +93,6 @@ class DataAsset:
         else:
             return None
 
-    def get_asset_path(self):
-        return self.resolved_path
-
     async def _handle_yield(self, *args, **kwargs):
         # Set up filesystem abstraction
         fs = await get_fs()
@@ -95,7 +105,7 @@ class DataAsset:
         base_path = await self._get_artifact_base_path()
 
         async for output in self.__fn(*args, **kwargs):
-            if output:
+            if self._output_has_data(output):
                 if isinstance(output, httpx.Response):
                     params = (
                         dict(output.request.url.params)
@@ -115,25 +125,27 @@ class DataAsset:
                 )
 
         # If artifacts have been created then create output parquet
-        if fs.glob(f"{base_path}/_artifacts/**/*.json"):
+        if fs.glob(f"{base_path}/_artifacts/{self.runtime_str}/**/*.json"):
             duckdb.query("SET temp_directory = './.tmp/duckdb/'")
+            folder_path = await self._get_folder_path(self.resolved_path)
+            fs.mkdirs(folder_path, exist_ok=True)
             duckdb.query(
                 f"""
                     COPY (
                     SELECT *
-                    FROM read_json_auto('mad://{base_path}/_artifacts/**/*.json', hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
+                    FROM read_json_auto('mad://{base_path}/_artifacts/{self.runtime_str}/**/*.json', hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
                     ) TO 'mad://{self.resolved_path}' (use_tmp_file false)
 
                 """
             )
-            self.last_materialized = datetime.utcnow()
+            self.data_written = True
 
     async def _handle_return(self, *args, **kwargs):
         # Call function to recieve output
         output = await self.__fn(*args, **kwargs)
 
         # If nothing is return do not perform write operation
-        if output:
+        if self._output_has_data(output):
             # Write output file to provided path
             await self._write_operation(self.resolved_path, output)
 
@@ -141,10 +153,12 @@ class DataAsset:
             if ".json" not in self.resolved_path:
                 base_path = await self._get_artifact_base_path()
                 file_name = await self._get_file_name()
-                artifact_path = f"{base_path}/_artifact/{file_name}.json"
+                artifact_path = (
+                    f"{base_path}/_artifact/{self.runtime_str}/{file_name}.json"
+                )
                 await self._write_operation(artifact_path, output)
 
-            self.last_materialized = datetime.utcnow()
+            self.data_written = True
 
     def _build_artifact_path(
         self,
@@ -154,18 +168,21 @@ class DataAsset:
     ):
 
         if params is None:
-            return f"{base_path}/_artifacts/fragment={fragment_number}.json"
+            return f"{base_path}/_artifacts/{self.runtime_str}/fragment={fragment_number}.json"
 
         params_path = "/".join(f"{key}={value}" for key, value in params.items())
 
-        return f"{base_path}/_artifacts/{params_path}.json"
+        return f"{base_path}/_artifacts/{self.runtime_str}/{params_path}.json"
 
-    async def _write_operation(self, path, data):
+    async def _write_operation(self, path: str, data: object):
         fs = await get_fs()
         await register_mad_protocol()
-        await self._get_folder_path(path)
 
         if isinstance(data, (duckdb.DuckDBPyRelation, pandas.DataFrame)):
+            # Before using COPY TO statement ensure directory exists
+            folder_path = await self._get_folder_path(path)
+            fs.mkdirs(folder_path, exist_ok=True)
+
             json_format = "FORMAT JSON, ARRAY true," if ".json" in path else ""
             duckdb.query("SET temp_directory = './.tmp/duckdb/'")
             duckdb.query(
@@ -177,15 +194,13 @@ class DataAsset:
             )
         elif isinstance(data, httpx.Response):
             # TODO: Find way to process raw text responses
-            if data.json():
-                await fs.write_data(path, data.json)
+            await fs.write_data(path, data.json)
         else:
             await fs.write_data(path, data)
 
     async def _get_folder_path(self, path):
         fs = await get_fs()
         folder_path = re.sub(r"[^/\\]+$", "", path)
-        fs.mkdirs(folder_path, exist_ok=True)
 
         return folder_path
 
@@ -221,9 +236,24 @@ class DataAsset:
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     def _generate_asset_iteration_guid(self):
-        self.runtime = datetime.utcnow().isoformat()
-        hash_input = f"{self.resolved_name}:{self.resolved_path}:{self.resolved_artifacts_dir}:{self.runtime}:{str(self.args)}"
+        hash_input = f"{self.resolved_name}:{self.resolved_path}:{self.resolved_artifacts_dir}:{self.runtime_str}:{str(self.args)}"
         return hashlib.md5(hash_input.encode()).hexdigest()
+
+    def _output_has_data(self, data: object):
+        if isinstance(data, httpx.Response):
+            # TODO: Create checking mechanism for raw text responses
+            check_result = True if data.json() else False
+
+        elif isinstance(data, duckdb.DuckDBPyRelation):
+            check_result = True if len(data.df()) else False
+
+        elif isinstance(data, pandas.DataFrame):
+            check_result = True if len(data) else False
+
+        else:
+            check_result = True if data else False
+
+        return check_result
 
     async def __register_asset(self):
         fs = await get_fs()
@@ -234,7 +264,8 @@ class DataAsset:
             "fn_name": self.fn_name,
             "parameters": self.args_dict,
             "output_path": self.resolved_path,
-            "runtime": self.runtime,
+            "runtime": self.runtime_str,
+            "data_written": self.data_written,
         }
 
         await fs.write_data(
