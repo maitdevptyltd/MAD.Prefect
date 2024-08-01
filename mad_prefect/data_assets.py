@@ -116,7 +116,6 @@ class DataAsset:
                     params = None
 
                 path = self._build_artifact_path(base_path, params, fragment_number)
-
                 await self._write_operation(path, output)
 
                 # Update fragment_number if used in path
@@ -194,7 +193,7 @@ class DataAsset:
             )
         elif isinstance(data, httpx.Response):
             # TODO: Find way to process raw text responses
-            await fs.write_data(path, data.json)
+            await fs.write_data(path, data.json())
         else:
             await fs.write_data(path, data)
 
