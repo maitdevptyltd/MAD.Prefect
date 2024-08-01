@@ -43,6 +43,8 @@ class DataAsset:
         self.resolved_artifacts_dir = self._resolve_attribute(self.artifacts_dir)
         self.resolved_name = self._resolve_attribute(self.name)
 
+        self.write_operation: bool = False
+
         if inspect.isasyncgen(self.__fn(*args, **kwargs)):
             await self._handle_yield(*args, **kwargs)
         else:
@@ -93,7 +95,7 @@ class DataAsset:
         base_path = await self._get_artifact_base_path()
 
         async for output in self.__fn(*args, **kwargs):
-            if output is not None:
+            if output:
                 if isinstance(output, httpx.Response):
                     params = (
                         dict(output.request.url.params)
@@ -131,7 +133,7 @@ class DataAsset:
         output = await self.__fn(*args, **kwargs)
 
         # If nothing is return do not perform write operation
-        if output is not None:
+        if output:
             # Write output file to provided path
             await self._write_operation(self.resolved_path, output)
 
@@ -175,8 +177,8 @@ class DataAsset:
             )
         elif isinstance(data, httpx.Response):
             # TODO: Find way to process raw text responses
-            output = data.json() if data.json() else data.text
-            await fs.write_data(path, output)
+            if data.json():
+                await fs.write_data(path, data.json)
         else:
             await fs.write_data(path, data)
 
