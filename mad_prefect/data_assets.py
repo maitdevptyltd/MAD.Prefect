@@ -9,6 +9,7 @@ from mad_prefect.filesystems import get_fs
 from mad_prefect.duckdb import register_mad_protocol
 import re
 import os
+import traceback
 
 
 class DataAsset:
@@ -47,6 +48,14 @@ class DataAsset:
         self.resolved_artifacts_dir = self._resolve_attribute(self.artifacts_dir)
         self.resolved_name = self._resolve_attribute(self.name)
 
+        # Generate identifiers
+        self.id = self._generate_asset_guid()
+        self.run_id = self._generate_asset_iteration_guid()
+
+        print(
+            f"Running operations for asset_run_id: {self.run_id}, on asset_id: {self.id}"
+        )
+
         # Set default value for self.data_written to False
         self.data_written: bool = False
 
@@ -65,9 +74,7 @@ class DataAsset:
         else:
             await self._handle_return(*args, **kwargs)
 
-        # Generate identifiers and write metadata
-        self.id = self._generate_asset_guid()
-        self.run_id = self._generate_asset_iteration_guid()
+        # Write metadata
         await self.__register_asset()
 
     async def query(self, query_str: str | None = None):
@@ -86,7 +93,7 @@ class DataAsset:
                 return duckdb.query(f"SELECT * FROM {self.resolved_name}_{self.id}")
             else:
                 directed_string = query_str.replace(
-                    "__asset__", f"{self.resolved_name}_{self.id}"
+                    self.resolved_name, f"{self.resolved_name}_{self.id}"
                 )
 
             return duckdb.query(directed_string)
@@ -94,11 +101,11 @@ class DataAsset:
             return None
 
     async def _handle_yield(self, *args, **kwargs):
-        # Set up filesystem abstraction
-        fs = await get_fs()
-        await register_mad_protocol()
+        artifact_glob_pattern = await self._create_yield_artifacts(*args, **kwargs)
+        await self._create_yield_output(artifact_glob_pattern)
 
-        # Set up starting fragment_number
+    async def _create_yield_artifacts(self, *args, **kwargs):
+        # Set up starting artifact fragment_number
         fragment_number = 1
 
         # Extract artifact base path
@@ -106,25 +113,34 @@ class DataAsset:
 
         async for output in self.__fn(*args, **kwargs):
             if self._output_has_data(output):
-                if isinstance(output, httpx.Response):
-                    params = (
-                        dict(output.request.url.params)
-                        if output.request.url.params
-                        else None
-                    )
-                else:
-                    params = None
+
+                params = (
+                    dict(output.request.url.params)
+                    if isinstance(output, httpx.Response) and output.request.url.params
+                    else None
+                )
 
                 path = self._build_artifact_path(base_path, params, fragment_number)
                 await self._write_operation(path, output)
+
+                print(
+                    f"An artifact for asset_id: {self.id} was written to path: \n {path}\n\n   "
+                )
 
                 # Update fragment_number if used in path
                 fragment_number = (
                     (fragment_number + 1) if "fragment=" in path else fragment_number
                 )
 
-        # If artifacts have been created then create output parquet
-        if fs.glob(f"{base_path}/_artifacts/{self.runtime_str}/**/*.json"):
+        artifact_glob_pattern = f"{base_path}/_artifacts/{self.runtime_str}/**/*.json"
+        return artifact_glob_pattern
+
+    async def _create_yield_output(self, glob_pattern: str):
+        # Set up filesystem abstraction
+        fs = await get_fs()
+        await register_mad_protocol()
+
+        if fs.glob(glob_pattern):
             duckdb.query("SET temp_directory = './.tmp/duckdb/'")
             folder_path = await self._get_folder_path(self.resolved_path)
             fs.mkdirs(folder_path, exist_ok=True)
@@ -132,12 +148,17 @@ class DataAsset:
                 f"""
                     COPY (
                     SELECT *
-                    FROM read_json_auto('mad://{base_path}/_artifacts/{self.runtime_str}/**/*.json', hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
+                    FROM read_json_auto('mad://{glob_pattern}', hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
                     ) TO 'mad://{self.resolved_path}' (use_tmp_file false)
 
                 """
             )
             self.data_written = True
+
+        else:
+            print(
+                f"No artifacts have been found for asset_id: {self.id}\n When attempting to write to {self.resolved_path}"
+            )
 
     async def _handle_return(self, *args, **kwargs):
         # Call function to recieve output
@@ -173,6 +194,18 @@ class DataAsset:
 
         return f"{base_path}/_artifacts/{self.runtime_str}/{params_path}.json"
 
+    async def _get_artifact_base_path(self):
+        # Extract folder path for folder set up
+        folder_path = await self._get_folder_path(self.resolved_path)
+
+        # Set up the base path for artifact storage
+        if not self.resolved_artifacts_dir:
+            base_path = folder_path
+        else:
+            base_path = self.resolved_artifacts_dir
+
+        return base_path
+
     async def _write_operation(self, path: str, data: object):
         fs = await get_fs()
         await register_mad_protocol()
@@ -197,23 +230,11 @@ class DataAsset:
         else:
             await fs.write_data(path, data)
 
-    async def _get_folder_path(self, path):
+    async def _get_folder_path(self, path: str):
         fs = await get_fs()
         folder_path = re.sub(r"[^/\\]+$", "", path)
 
         return folder_path
-
-    async def _get_artifact_base_path(self):
-        # Extract folder path for folder set up
-        folder_path = await self._get_folder_path(self.resolved_path)
-
-        # Set up the base path for artifact storage
-        if not self.resolved_artifacts_dir:
-            base_path = folder_path
-        else:
-            base_path = self.resolved_artifacts_dir
-
-        return base_path
 
     async def _get_file_name(self):
         return re.search(r"([^\\/]+)(?=\.[^\\/\.]+$)", self.resolved_path).group(1)
