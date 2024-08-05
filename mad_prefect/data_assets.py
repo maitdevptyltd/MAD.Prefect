@@ -132,7 +132,7 @@ class DataAsset:
                     (fragment_number + 1) if "fragment=" in path else fragment_number
                 )
 
-        artifact_glob_pattern = f"{base_path}/_artifacts/{self.runtime_str}/**/*.json"
+        artifact_glob_pattern = f"{base_path}/_artifacts/runtime={self.runtime_str}/**/*.json"
         return artifact_glob_pattern
 
     async def _create_yield_output(self, glob_pattern: str):
