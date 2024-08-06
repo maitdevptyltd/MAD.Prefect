@@ -298,38 +298,6 @@ class DataAsset:
             asset_metadata,
         )
 
-    @property
-    def asset_run_id(self):
-        return self.run_id
-
-    @property
-    def asset_id(self):
-        return self.id
-
-    @property
-    def asset_name(self):
-        return self.resolved_name
-
-    @property
-    def fn_name(self):
-        return self.fn_name
-
-    @property
-    def parameters(self):
-        return self.args_dict
-
-    @property
-    def output_path(self):
-        return self.resolved_path
-
-    @property
-    def runtime(self):
-        return self.runtime_str
-
-    @property
-    def data_written(self):
-        return self.data_written
-
     def __getstate__(self):
         pass
 
