@@ -56,8 +56,9 @@ class DataAsset:
             f"Running operations for asset_run_id: {self.run_id}, on asset_id: {self.id}"
         )
 
-        # Set default value for self.data_written to False
+        # Set default values for attributes
         self.data_written: bool = False
+        self.artifact_glob = None
 
         # TODO: set up function that examines metadata to extract
         # last_created timestamp
@@ -135,6 +136,7 @@ class DataAsset:
         artifact_glob_pattern = (
             f"{base_path}/_artifacts/runtime={self.runtime_str}/**/*.json"
         )
+        self.artifact_glob = artifact_glob_pattern
         return artifact_glob_pattern
 
     async def _create_yield_output(self, glob_pattern: str):
@@ -288,12 +290,45 @@ class DataAsset:
             "output_path": self.resolved_path,
             "runtime": self.runtime_str,
             "data_written": self.data_written,
+            "artifact_glob": self.artifact_glob,
         }
 
         await fs.write_data(
             f"{self.ASSET_METADATA_LOCATION}/asset_name={self.resolved_name}/asset_id={self.id}/{self.run_id}.json",
             asset_metadata,
         )
+
+    @property
+    def asset_run_id(self):
+        return self.run_id
+
+    @property
+    def asset_id(self):
+        return self.id
+
+    @property
+    def asset_name(self):
+        return self.resolved_name
+
+    @property
+    def fn_name(self):
+        return self.fn_name
+
+    @property
+    def parameters(self):
+        return self.args_dict
+
+    @property
+    def output_path(self):
+        return self.resolved_path
+
+    @property
+    def runtime(self):
+        return self.runtime_str
+
+    @property
+    def data_written(self):
+        return self.data_written
 
     def __getstate__(self):
         pass
