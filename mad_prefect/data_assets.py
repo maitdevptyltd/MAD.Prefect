@@ -132,7 +132,9 @@ class DataAsset:
                     (fragment_number + 1) if "fragment=" in path else fragment_number
                 )
 
-        artifact_glob_pattern = f"{base_path}/_artifacts/runtime={self.runtime_str}/**/*.json"
+        artifact_glob_pattern = (
+            f"{base_path}/_artifacts/runtime={self.runtime_str}/**/*.json"
+        )
         return artifact_glob_pattern
 
     async def _create_yield_output(self, glob_pattern: str):
@@ -157,7 +159,7 @@ class DataAsset:
 
         else:
             print(
-                f"No artifacts have been found for asset_id: {self.id}\n When attempting to write to {self.resolved_path}"
+                f"No artifacts have been found for asset_id: {self.id}\n When using glob pattern: {glob_pattern}\n While attempting to write to {self.resolved_path}"
             )
 
     async def _handle_return(self, *args, **kwargs):
@@ -174,7 +176,7 @@ class DataAsset:
                 base_path = await self._get_artifact_base_path()
                 file_name = await self._get_file_name()
                 artifact_path = (
-                    f"{base_path}/_artifact/{self.runtime_str}/{file_name}.json"
+                    f"{base_path}/_artifact/runtime={self.runtime_str}/{file_name}.json"
                 )
                 await self._write_operation(artifact_path, output)
 
@@ -188,11 +190,11 @@ class DataAsset:
     ):
 
         if params is None:
-            return f"{base_path}/_artifacts/{self.runtime_str}/fragment={fragment_number}.json"
+            return f"{base_path}/_artifacts/runtime={self.runtime_str}/fragment={fragment_number}.json"
 
         params_path = "/".join(f"{key}={value}" for key, value in params.items())
 
-        return f"{base_path}/_artifacts/{self.runtime_str}/{params_path}.json"
+        return f"{base_path}/_artifacts/runtime={self.runtime_str}/{params_path}.json"
 
     async def _get_artifact_base_path(self):
         # Extract folder path for folder set up
