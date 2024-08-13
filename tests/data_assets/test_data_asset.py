@@ -11,10 +11,6 @@ import pandas as pd
 import os
 import pytest
 
-# Set up pytest
-pytest.register_assert_rewrite("pytest_asyncio")
-pytestmark = pytest.mark.asyncio
-
 
 # Set session timestamp as path prefix for test files
 @pytest.fixture(scope="session", autouse=True)
