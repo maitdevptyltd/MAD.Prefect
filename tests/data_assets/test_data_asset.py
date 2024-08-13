@@ -4,7 +4,7 @@ import duckdb
 from mad_prefect.data_assets import asset
 import mad_prefect.data_assets
 from mad_prefect.duckdb import register_mad_protocol
-from tests.sample_data.mock_api import get_api, ingest_endpoint
+from tests.data_assets.sample_data.mock_api import get_api, ingest_endpoint
 from mad_prefect.filesystems import get_fs
 import mad_prefect.filesystems
 import pandas as pd
