@@ -69,8 +69,12 @@ class DataAsset:
         # Instead of running self.__fn if data
         # Has been created within cache period
 
-        # Run self.__fn to retrieve function output
-        if inspect.isasyncgen(self.__fn(*args, **kwargs)):
+        # Handle the fn differently depending on whether or not it yields
+        is_generator_fn = inspect.isasyncgenfunction(
+            self.__fn
+        ) or inspect.isgeneratorfunction(self.__fn)
+
+        if is_generator_fn:
             await self._handle_yield(*args, **kwargs)
         else:
             await self._handle_return(*args, **kwargs)
