@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 import hashlib
 import inspect
 from typing import Callable, cast
@@ -35,7 +35,7 @@ class DataAsset:
 
     async def __call__(self, *args, **kwargs):
         # Set runtime
-        self.runtime = datetime.utcnow()
+        self.runtime = datetime.now(UTC)
         self.runtime_str = self.runtime.isoformat().replace(":", "_")
 
         # Wrap args into dictionary
