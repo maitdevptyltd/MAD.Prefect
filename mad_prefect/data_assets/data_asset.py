@@ -324,3 +324,37 @@ async def get_asset_metadata():
             """
         )
         return metadata
+
+
+async def get_data_by_asset_name(asset_name: str):
+    await register_mad_protocol()
+    asset_meta_query = await get_asset_metadata()
+    print(asset_meta_query)
+    ranked_asset_query = duckdb.query(
+        f"""
+        SELECT
+            asset_id,
+            artifact_glob,
+            runtime,
+            ROW_NUMBER() OVER(PARTITION BY asset_id ORDER BY runtime DESC) as rn
+        FROM asset_meta_query
+        WHERE asset_name = '{asset_name}' 
+            AND data_written = 'true'
+            AND artifact_glob IS NOT NULL
+        """
+    )
+    row_tuples = duckdb.query(
+        """
+        SELECT 
+            artifact_glob 
+        FROM ranked_asset_query
+        WHERE rn = 1
+        """
+    ).fetchall()
+
+    artifact_globs = [f"mad://{artifact_glob[0]}" for artifact_glob in row_tuples]
+
+    full_data_set = duckdb.query(
+        f"SELECT * FROM read_json_auto({artifact_globs}, union_by_name = true, maximum_object_size = 33554432)"
+    )
+    return full_data_set
