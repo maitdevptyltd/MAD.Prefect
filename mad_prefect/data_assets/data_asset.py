@@ -323,6 +323,9 @@ async def get_asset_metadata():
                     asset_id ASC
             """
         )
+        duckdb.query(
+            f"COPY (SELECT * FROM metadata) TO 'mad://{ASSET_METADATA_LOCATION}/metadata_binding.parquet' (use_tmp_file_false)"
+        )
         return metadata
 
 
