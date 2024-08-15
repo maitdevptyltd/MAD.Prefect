@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 import hashlib
 import inspect
-from typing import Callable, cast
+from typing import Callable
 import duckdb
 import httpx
 import pandas
@@ -9,7 +9,6 @@ from mad_prefect.filesystems import get_fs
 from mad_prefect.duckdb import register_mad_protocol
 import re
 import os
-import traceback
 
 
 class DataAsset:
@@ -30,8 +29,6 @@ class DataAsset:
         self.fn_signature = inspect.signature(fn)
         self.runtime_str = None
         self.last_materialized = None
-
-        pass
 
     async def __call__(self, *args, **kwargs):
         # Set runtime
