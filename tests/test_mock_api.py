@@ -1,7 +1,11 @@
 import asyncio
 import inspect
 import httpx
-from tests.sample_data.mock_api import generate_data, get_api, ingest_endpoint
+from tests.data_assets.sample_data.mock_api import (
+    generate_data,
+    get_api,
+    ingest_endpoint,
+)
 import mad_prefect.filesystems
 
 # Override the environment variable before importing register_mad_filesystem

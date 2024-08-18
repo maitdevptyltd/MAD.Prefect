@@ -1,8 +1,7 @@
 import asyncio
 from datetime import datetime
 import duckdb
-from mad_prefect.data_assets.data_asset import asset
-import mad_prefect.data_assets.data_asset
+from mad_prefect.data_assets import asset
 from mad_prefect.duckdb import register_mad_protocol
 from tests.data_assets.sample_data.mock_api import get_api, ingest_endpoint
 from mad_prefect.filesystems import get_fs
@@ -22,7 +21,6 @@ def settest_filesystem_url():
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     base_url = os.getenv("FILESYSTEM_URL", "file://./.tmp/storage")
     mad_prefect.filesystems.FILESYSTEM_URL = f"{base_url}/test_{timestamp}"
-    mad_prefect.data_assets.FILESYSTEM_URL = f"{base_url}/test_{timestamp}"
 
 
 ## FIXTURES ##
