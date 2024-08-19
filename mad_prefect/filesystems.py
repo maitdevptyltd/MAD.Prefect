@@ -111,7 +111,8 @@ class FsspecFileSystem(
 
     @prefect.utilities.asyncutils.sync_compatible
     async def delete_path(self, path: str) -> None:
-        raise NotImplementedError()
+        resolved_path = self._resolve_path(path)
+        self._fs.rm(resolved_path)
 
     @prefect.utilities.asyncutils.sync_compatible
     async def get_directory(

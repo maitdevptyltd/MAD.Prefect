@@ -39,7 +39,7 @@ class MadFileSystem(fsspec.AbstractFileSystem):
 
         # If path is incomplete, prefix the path with the fs_url
         if not path.startswith(self._fs_url):
-            path = f"{self._fs_url}/{path}"
+            path = f"{self._fs_url.rstrip('/')}/{path}"
 
         return path
 
