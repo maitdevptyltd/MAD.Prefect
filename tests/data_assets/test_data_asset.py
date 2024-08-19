@@ -10,6 +10,14 @@ import pandas as pd
 import os
 import pytest
 
+
+# Test Util Function
+def get_runtime(glob: list[str]):
+    path = glob[0]
+    runtime = path.split("runtime=")[1].split("/")[0]
+    return runtime
+
+
 # Set up pytest
 pytest.register_assert_rewrite("pytest_asyncio")
 pytestmark = pytest.mark.asyncio
@@ -268,14 +276,17 @@ async def test_return_json_artifact(fixture_1):
     """
     fs = await get_fs()
     json_paths = fs.glob("fixture_1/**/*.json")
-    expected_path = "fixture_1/bronze/orgs_returned/_artifact/organisations_return.json"
-    expected_records = 3
+    assert json_paths
+    if json_paths:
+        runtime = get_runtime(json_paths)
+        expected_path = f"fixture_1/bronze/orgs_returned/_artifact/runtime={runtime}/organisations_return.json"
+        expected_records = 3
 
-    assert expected_path in json_paths
+        assert expected_path in json_paths
 
-    artifact = await fs.read_data(expected_path)
+        artifact = await fs.read_data(expected_path)
 
-    assert len(artifact) == expected_records
+        assert len(artifact) == expected_records
 
 
 # Test 2
@@ -323,19 +334,22 @@ async def test_yield_response_with_params_artifacts(fixture_2):
     """
     fs = await get_fs()
     json_paths = fs.glob("fixture_2/**/*.json")
-    expected_paths = [
-        "fixture_2/bronze/buildings_yielded/_artifacts/limit=100/offset=0.json",
-        "fixture_2/bronze/buildings_yielded/_artifacts/limit=100/offset=100.json",
-        "fixture_2/bronze/buildings_yielded/_artifacts/limit=100/offset=200.json",
-    ]
-    expected_records = 67
+    assert json_paths
+    if json_paths:
+        runtime = get_runtime(json_paths)
+        expected_paths = [
+            f"fixture_2/bronze/buildings_yielded/_artifacts/runtime={runtime}/limit=100/offset=0.json",
+            f"fixture_2/bronze/buildings_yielded/_artifacts/runtime={runtime}/limit=100/offset=100.json",
+            f"fixture_2/bronze/buildings_yielded/_artifacts/runtime={runtime}/limit=100/offset=200.json",
+        ]
+        expected_records = 67
 
-    assert expected_paths == json_paths
+        assert expected_paths == json_paths
 
-    last_artifact = await fs.read_data(expected_paths[2])
-    record_count = len(last_artifact["buildings"])
+        last_artifact = await fs.read_data(expected_paths[2])
+        record_count = len(last_artifact["buildings"])
 
-    assert record_count == expected_records
+        assert record_count == expected_records
 
 
 # Test 4
@@ -363,6 +377,7 @@ async def test_yield_response_with_params_output(fixture_2):
         "buildings",
         "limit",
         "offset",
+        "runtime",
     ]
 
     assert expected_path in parquet_paths
@@ -391,19 +406,22 @@ async def test_yield_response_fragment_artifacts(fixture_3):
     """
     fs = await get_fs()
     json_paths = fs.glob("fixture_3/**/*.json")
-    expected_paths = [
-        "fixture_3/bronze/plants_yielded/_artifacts/fragment=1.json",
-        "fixture_3/bronze/plants_yielded/_artifacts/fragment=2.json",
-        "fixture_3/bronze/plants_yielded/_artifacts/fragment=3.json",
-    ]
-    expected_record_count = 10
+    assert json_paths
+    if json_paths:
+        runtime = get_runtime(json_paths)
+        expected_paths = [
+            f"fixture_3/bronze/plants_yielded/_artifacts/runtime={runtime}/fragment=1.json",
+            f"fixture_3/bronze/plants_yielded/_artifacts/runtime={runtime}/fragment=2.json",
+            f"fixture_3/bronze/plants_yielded/_artifacts/runtime={runtime}/fragment=3.json",
+        ]
+        expected_record_count = 10
 
-    assert expected_paths == json_paths
+        assert expected_paths == json_paths
 
-    last_artifact = await fs.read_data(expected_paths[2])
-    record_count = len(last_artifact["plants"])
+        last_artifact = await fs.read_data(expected_paths[2])
+        record_count = len(last_artifact["plants"])
 
-    assert record_count == expected_record_count
+        assert record_count == expected_record_count
 
 
 # Test 6
@@ -430,6 +448,7 @@ async def test_yield_response_fragment_output(fixture_3):
         "record_count",
         "plants",
         "fragment",
+        "runtime",
     ]
 
     assert expected_path in parquet_paths
@@ -458,17 +477,20 @@ async def test_yield_json_fragment_artifacts(fixture_4):
     """
     fs = await get_fs()
     json_paths = fs.glob("fixture_4/**/*.json")
-    expected_paths = [
-        "fixture_4/bronze/orgs_yielded/_artifacts/fragment=1.json",
-        "fixture_4/bronze/orgs_yielded/_artifacts/fragment=2.json",
-        "fixture_4/bronze/orgs_yielded/_artifacts/fragment=3.json",
-    ]
-    expected_record_count = 67
+    assert json_paths
+    if json_paths:
+        runtime = get_runtime(json_paths)
+        expected_paths = [
+            f"fixture_4/bronze/orgs_yielded/_artifacts/runtime={runtime}/fragment=1.json",
+            f"fixture_4/bronze/orgs_yielded/_artifacts/runtime={runtime}/fragment=2.json",
+            f"fixture_4/bronze/orgs_yielded/_artifacts/runtime={runtime}/fragment=3.json",
+        ]
+        expected_record_count = 67
 
-    assert expected_paths == json_paths
+        assert expected_paths == json_paths
 
-    last_artifact = await fs.read_data(expected_paths[2])
-    record_count = len(last_artifact)
+        last_artifact = await fs.read_data(expected_paths[2])
+        record_count = len(last_artifact)
 
     assert record_count == expected_record_count
 
@@ -498,6 +520,7 @@ async def test_yield_json_fragment_output(fixture_4):
         "orders",
         "reviews",
         "fragment",
+        "runtime",
     ]
 
     assert expected_path in parquet_paths
@@ -526,19 +549,22 @@ async def test_yield_artifacts_custom_dir(fixture_5):
     """
     fs = await get_fs()
     json_paths = fs.glob("fixture_5/**/*.json")
-    expected_paths = [
-        "fixture_5/raw/pelicans/_artifacts/fragment=1.json",
-        "fixture_5/raw/pelicans/_artifacts/fragment=2.json",
-        "fixture_5/raw/pelicans/_artifacts/fragment=3.json",
-    ]
-    expected_record_count = 67
+    assert json_paths
+    if json_paths:
+        runtime = get_runtime(json_paths)
+        expected_paths = [
+            f"fixture_5/raw/pelicans/_artifacts/runtime={runtime}/fragment=1.json",
+            f"fixture_5/raw/pelicans/_artifacts/runtime={runtime}/fragment=2.json",
+            f"fixture_5/raw/pelicans/_artifacts/runtime={runtime}/fragment=3.json",
+        ]
+        expected_record_count = 67
 
-    assert expected_paths == json_paths
+        assert expected_paths == json_paths
 
-    last_artifact = await fs.read_data(expected_paths[2])
-    record_count = len(last_artifact)
+        last_artifact = await fs.read_data(expected_paths[2])
+        record_count = len(last_artifact)
 
-    assert record_count == expected_record_count
+        assert record_count == expected_record_count
 
 
 # Test 10
@@ -555,17 +581,18 @@ async def test_duckdbpyrelation_artifact(fixture_6):
     """
     fs = await get_fs()
     json_paths = fs.glob("fixture_6/**/*.json")
-    expected_path = (
-        "fixture_6/bronze/buildings_unnested/_artifact/buildings_unnested_query.json"
-    )
-    expected_record_count = 267
+    assert json_paths
+    if json_paths:
+        runtime = get_runtime(json_paths)
+        expected_path = f"fixture_6/bronze/buildings_unnested/_artifact/runtime={runtime}/buildings_unnested_query.json"
+        expected_record_count = 267
 
-    assert expected_path in json_paths
+        assert expected_path in json_paths
 
-    artifact = await fs.read_data(expected_path)
-    record_count = len(artifact)
+        artifact = await fs.read_data(expected_path)
+        record_count = len(artifact)
 
-    assert record_count == expected_record_count
+        assert record_count == expected_record_count
 
 
 # Test 11
@@ -622,15 +649,18 @@ async def test_pd_dataframe_artifact(fixture_7):
     """
     fs = await get_fs()
     json_paths = fs.glob("fixture_7/**/*.json")
-    expected_path = "fixture_7/raw/plants_unnested/_artifact/plants_unnested_df.json"
-    expected_record_count = 30
+    assert json_paths
+    if json_paths:
+        runtime = get_runtime(json_paths)
+        expected_path = f"fixture_7/raw/plants_unnested/_artifact/runtime={runtime}/plants_unnested_df.json"
+        expected_record_count = 30
 
-    assert expected_path in json_paths
+        assert expected_path in json_paths
 
-    artifact = await fs.read_data(expected_path)
-    record_count = len(artifact)
+        artifact = await fs.read_data(expected_path)
+        record_count = len(artifact)
 
-    assert record_count == expected_record_count
+        assert record_count == expected_record_count
 
 
 # Test 13
@@ -690,6 +720,7 @@ async def test_multiple_asset_queries():
         "record_count",
         "plants",
         "fragment",
+        "runtime",
     ]
     expected_building_columns = [
         "api_version",
@@ -698,6 +729,7 @@ async def test_multiple_asset_queries():
         "buildings",
         "limit",
         "offset",
+        "runtime",
     ]
     expected_merge_columns = ["plants", "buildings"]
 
