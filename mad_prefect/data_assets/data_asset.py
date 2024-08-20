@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 import hashlib
 import inspect
-from typing import Callable
+from typing import Callable, cast
 import duckdb
 import httpx
 import pandas
@@ -30,13 +30,22 @@ class DataAsset:
         self.runtime_str = None
         self.last_materialized = None
 
+        self.bound_arguments = cast(inspect.BoundArguments | None, None)
+
+    def with_arguments(self, *args, **kwargs):
+        asset = DataAsset(self.__fn, self.path, self.artifacts_dir, self.name)
+        asset.bound_arguments = asset.fn_signature.bind(*args, **kwargs)
+        asset.bound_arguments.apply_defaults()
+
+        return asset
+
     async def __call__(self, *args, **kwargs):
         # Set runtime
         self.runtime = datetime.now(UTC)
         self.runtime_str = self.runtime.isoformat().replace(":", "_")
 
         # Wrap args into dictionary
-        self.args = self.fn_signature.bind(*args, **kwargs)
+        self.args = self.bound_arguments or self.fn_signature.bind(*args, **kwargs)
         self.args.apply_defaults()
         self.args_dict = dict(self.args.arguments)
 
@@ -72,9 +81,9 @@ class DataAsset:
         ) or inspect.isgeneratorfunction(self.__fn)
 
         if is_generator_fn:
-            await self._handle_yield(*args, **kwargs)
+            await self._handle_yield(*self.args.args, **self.args.kwargs)
         else:
-            await self._handle_return(*args, **kwargs)
+            await self._handle_return(*self.args.args, **self.args.kwargs)
 
         # Write metadata
         await self.__register_asset()
