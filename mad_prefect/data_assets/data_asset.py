@@ -183,6 +183,7 @@ class DataAsset:
             # Write output file to provided path
             await self._write_operation(self.resolved_path, output)
 
+            # TODO: Normalize artifact write process to align with _handle_yield
             # Write raw json file to appropriate location
             if ".json" not in self.resolved_path:
                 base_path = await self._get_artifact_base_path()
@@ -337,33 +338,42 @@ async def get_asset_metadata():
 
 async def get_data_by_asset_name(asset_name: str):
     await register_mad_protocol()
-    await get_asset_metadata()
-    ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", ".asset_metadata")
-    ranked_asset_query = duckdb.query(
-        f"""
-        SELECT
-            asset_id,
-            artifact_glob,
-            runtime,
-            ROW_NUMBER() OVER(PARTITION BY asset_id ORDER BY runtime DESC) as rn
-        FROM 'mad://{ASSET_METADATA_LOCATION}/metadata_binding.parquet'
-        WHERE asset_name = '{asset_name}' 
-            AND data_written = 'true'
-            AND artifact_glob IS NOT NULL
-        """
-    )
-    row_tuples = duckdb.query(
-        """
-        SELECT 
-            artifact_glob 
-        FROM ranked_asset_query
-        WHERE rn = 1
-        """
-    ).fetchall()
+    metadata = await get_asset_metadata()
+    if metadata:
+        ASSET_METADATA_LOCATION = os.getenv(
+            "ASSET_METADATA_LOCATION", ".asset_metadata"
+        )
+        ranked_asset_query = duckdb.query(
+            f"""
+            SELECT
+                asset_id,
+                artifact_glob,
+                runtime,
+                ROW_NUMBER() OVER(PARTITION BY asset_id ORDER BY runtime DESC) as rn
+            FROM 'mad://{ASSET_METADATA_LOCATION}/metadata_binding.parquet'
+            WHERE asset_name = '{asset_name}' 
+                AND data_written = 'true'
+                AND artifact_glob IS NOT NULL
+            """
+        )
+        row_tuples = duckdb.query(
+            """
+            SELECT 
+                artifact_glob 
+            FROM ranked_asset_query
+            WHERE rn = 1
+            """
+        ).fetchall()
 
-    artifact_globs = [f"mad://{artifact_glob[0]}" for artifact_glob in row_tuples]
+        artifact_globs = [f"mad://{artifact_glob[0]}" for artifact_glob in row_tuples]
+    else:
+        artifact_globs = None
+        print("No metadata found.")
 
-    full_data_set = duckdb.query(
-        f"SELECT * FROM read_json_auto({artifact_globs}, union_by_name = true, maximum_object_size = 33554432)"
-    )
-    return full_data_set
+    if artifact_globs:
+        full_data_set = duckdb.query(
+            f"SELECT * FROM read_json_auto({artifact_globs}, union_by_name = true, maximum_object_size = 33554432)"
+        )
+        return full_data_set
+    else:
+        print(f"No artifact globs found for {asset_name}")
