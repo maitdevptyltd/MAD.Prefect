@@ -337,8 +337,8 @@ async def get_asset_metadata():
 
 async def get_data_by_asset_name(asset_name: str):
     await register_mad_protocol()
-    asset_meta_query = await get_asset_metadata()
-    print(asset_meta_query)
+    await get_asset_metadata()
+    ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", ".asset_metadata")
     ranked_asset_query = duckdb.query(
         f"""
         SELECT
@@ -346,7 +346,7 @@ async def get_data_by_asset_name(asset_name: str):
             artifact_glob,
             runtime,
             ROW_NUMBER() OVER(PARTITION BY asset_id ORDER BY runtime DESC) as rn
-        FROM asset_meta_query
+        FROM 'mad://{ASSET_METADATA_LOCATION}/metadata_binding.parquet'
         WHERE asset_name = '{asset_name}' 
             AND data_written = 'true'
             AND artifact_glob IS NOT NULL
