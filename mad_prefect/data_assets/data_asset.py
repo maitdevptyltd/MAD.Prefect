@@ -262,7 +262,7 @@ class DataAsset:
     ):
         if isinstance(output, DataAssetArtifact):
             # If the output is already a DataAssetArtifact
-            # use the input artifact_dir as base_path & httpx.Response params as params
+            # use the input dir as base_path & httpx.Response params as params (if applicable)
             artifact = output
             params = output._get_params()
             base_path = output._get_base_path()
