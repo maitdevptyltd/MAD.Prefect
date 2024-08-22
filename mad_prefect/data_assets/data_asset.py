@@ -151,6 +151,9 @@ class DataAsset:
         # For now use runtime as placeholder
         self.last_created = self.runtime
 
+        # Write metadata before processing result for troubleshooting purposes
+        await self.__register_asset()
+
         # TODO: in future set up caching that reads from path
         # Instead of running self.__fn if data
         # Has been created within cache period
