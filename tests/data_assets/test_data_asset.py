@@ -296,6 +296,31 @@ def fixture_11():
     asyncio.run(asset_bronze_eagles_yielded_response())
 
 
+@asset(
+    "fixture_12/bronze/{endpoint}_yielded/{endpoint}_json.parquet",
+    artifacts_dir="fixture_12/raw/{endpoint}",
+    snapshot_artifacts=False,
+)
+async def asset_bronze_template(endpoint: str):
+    """
+    Fixture 12
+    Purpose: Test writing data to path and artifacts_dir which contain function params
+    Function Name: asset_bronze_template
+    Output Method: Yield
+    Data Type: json
+    Params Used: N/A - json
+    Artifact Storage: Custom
+    Snapshot Artifacts: False
+    """
+    async for output in ingest_endpoint(endpoint=endpoint):
+        yield output[endpoint]
+
+
+@pytest.fixture(scope="session")
+def fixture_12():
+    asyncio.run(asset_bronze_template("killer-whales"))
+
+
 ## TESTS ##
 
 
@@ -882,9 +907,8 @@ async def test_yield_none(fixture_10):
 
     assert none_query is None
 
-    # Test 17
 
-
+# Test 18
 async def test_yielded_daa_resonse(fixture_11):
     """
     Test write operations for functions that yield DataAssetArtifact with httpx.Response content
@@ -923,3 +947,18 @@ async def test_yielded_daa_resonse(fixture_11):
         record_count = len(last_artifact["eagles"])
 
         assert record_count == expected_record_count
+
+
+# Test 19
+async def test_path_substitution(fixture_12):
+    fs = await get_fs()
+    json_paths = fs.glob("fixture_12/**/*.json")
+    assert json_paths
+    if json_paths:
+        expected_paths = [
+            "fixture_12/raw/killer-whales/fragment=1.json",
+            "fixture_12/raw/killer-whales/fragment=2.json",
+            "fixture_12/raw/killer-whales/fragment=3.json",
+        ]
+
+        assert json_paths == expected_paths
