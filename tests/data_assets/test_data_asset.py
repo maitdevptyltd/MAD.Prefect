@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime
 import duckdb
 from mad_prefect.data_assets import asset
+from mad_prefect.data_assets.data_asset import DataAssetArtifact
 from mad_prefect.duckdb import register_mad_protocol
 from tests.data_assets.sample_data.mock_api import get_api, ingest_endpoint
 from mad_prefect.filesystems import get_fs
@@ -54,7 +55,10 @@ def fixture_1():
     asyncio.run(asset_bronze_organisations_return())
 
 
-@asset(f"fixture_2/bronze/buildings_yielded/buildings_api-response.parquet")
+@asset(
+    path=f"fixture_2/bronze/buildings_yielded/buildings_api-response.parquet",
+    snapshot_artifacts=False,
+)
 async def asset_bronze_buildings_yielded_response():
     """
     Fixture 2
@@ -64,6 +68,7 @@ async def asset_bronze_buildings_yielded_response():
     Data Type: httpx.Response
     Params Used: Yes
     Artifact Storage: Default
+    Snapshot Artifacts: False
     """
     async for output in ingest_endpoint(
         endpoint="buildings", return_type="api_response"
@@ -259,6 +264,37 @@ def fixture_10():
     asyncio.run(asset_bronze_yielded_fully_none())
 
 
+@asset(
+    path=f"fixture_11/bronze/eagles_yielded/data_asset_artifact.parquet",
+    snapshot_artifacts=False,
+)
+async def asset_bronze_eagles_yielded_response():
+    """
+    Fixture 11
+    Purpose: Test writing DataAssetArtifact with yield, to params based hive partition
+    Function Name: asset_bronze_eagles_yielded_response
+    Output Method: Yield
+    Data Type: DataAssetArtifact -> httpx.Response
+    Params Used: Yes
+    Artifact Storage: Default
+    Snapshop Artifacts: False
+    """
+    sky_quadrant_ids = [112233, 113322, 221133, 332211]
+    for sky_quadrant_id in sky_quadrant_ids:
+        async for output in ingest_endpoint(
+            endpoint="eagles", return_type="api_response"
+        ):
+            yield DataAssetArtifact(
+                output,
+                dir=f"fixture_11/raw/eagles_yielded/sky_quadrant_id={sky_quadrant_id}",
+            )
+
+
+@pytest.fixture(scope="session")
+def fixture_11():
+    asyncio.run(asset_bronze_eagles_yielded_response())
+
+
 ## TESTS ##
 
 
@@ -279,7 +315,7 @@ async def test_return_json_artifact(fixture_1):
     assert json_paths
     if json_paths:
         runtime = get_runtime(json_paths)
-        expected_path = f"fixture_1/bronze/orgs_returned/_artifact/runtime={runtime}/organisations_return.json"
+        expected_path = f"fixture_1/bronze/orgs_returned/_artifacts/runtime={runtime}/organisations_return.json"
         expected_records = 3
 
         assert expected_path in json_paths
@@ -323,7 +359,8 @@ async def test_return_json_output(fixture_1):
 # Test 3
 async def test_yield_response_with_params_artifacts(fixture_2):
     """
-    Tests artifacts have been successfully created with params based file paths
+    Tests artifacts have been successfully created with params based file paths that do not
+    use snapshotting for artifacts.
 
     Fixture Purpose: Test writing httpx.Response's with yield, to params based file paths
 
@@ -336,11 +373,10 @@ async def test_yield_response_with_params_artifacts(fixture_2):
     json_paths = fs.glob("fixture_2/**/*.json")
     assert json_paths
     if json_paths:
-        runtime = get_runtime(json_paths)
         expected_paths = [
-            f"fixture_2/bronze/buildings_yielded/_artifacts/runtime={runtime}/limit=100/offset=0.json",
-            f"fixture_2/bronze/buildings_yielded/_artifacts/runtime={runtime}/limit=100/offset=100.json",
-            f"fixture_2/bronze/buildings_yielded/_artifacts/runtime={runtime}/limit=100/offset=200.json",
+            f"fixture_2/bronze/buildings_yielded/_artifacts/limit=100/offset=0.json",
+            f"fixture_2/bronze/buildings_yielded/_artifacts/limit=100/offset=100.json",
+            f"fixture_2/bronze/buildings_yielded/_artifacts/limit=100/offset=200.json",
         ]
         expected_records = 67
 
@@ -398,6 +434,7 @@ async def test_yield_response_fragment_artifacts(fixture_3):
     Tests artifacts have been successfully created with fragment based file paths
 
     Fixture Purpose: Test writing httpx.Response's with yield, when no params are provided
+    NOTE: Because the httpx.Response has no params it uses fragment based file paths.
 
     Acceptance Criteria:
     1. Correct file paths have been created
@@ -553,9 +590,9 @@ async def test_yield_artifacts_custom_dir(fixture_5):
     if json_paths:
         runtime = get_runtime(json_paths)
         expected_paths = [
-            f"fixture_5/raw/pelicans/_artifacts/runtime={runtime}/fragment=1.json",
-            f"fixture_5/raw/pelicans/_artifacts/runtime={runtime}/fragment=2.json",
-            f"fixture_5/raw/pelicans/_artifacts/runtime={runtime}/fragment=3.json",
+            f"fixture_5/raw/pelicans/runtime={runtime}/fragment=1.json",
+            f"fixture_5/raw/pelicans/runtime={runtime}/fragment=2.json",
+            f"fixture_5/raw/pelicans/runtime={runtime}/fragment=3.json",
         ]
         expected_record_count = 67
 
@@ -584,7 +621,7 @@ async def test_duckdbpyrelation_artifact(fixture_6):
     assert json_paths
     if json_paths:
         runtime = get_runtime(json_paths)
-        expected_path = f"fixture_6/bronze/buildings_unnested/_artifact/runtime={runtime}/buildings_unnested_query.json"
+        expected_path = f"fixture_6/bronze/buildings_unnested/_artifacts/runtime={runtime}/buildings_unnested_query.json"
         expected_record_count = 267
 
         assert expected_path in json_paths
@@ -652,7 +689,9 @@ async def test_pd_dataframe_artifact(fixture_7):
     assert json_paths
     if json_paths:
         runtime = get_runtime(json_paths)
-        expected_path = f"fixture_7/raw/plants_unnested/_artifact/runtime={runtime}/plants_unnested_df.json"
+        expected_path = (
+            f"fixture_7/raw/plants_unnested/runtime={runtime}/plants_unnested_df.json"
+        )
         expected_record_count = 30
 
         assert expected_path in json_paths
@@ -841,3 +880,45 @@ async def test_yield_none(fixture_10):
     none_query = await asset_bronze_yielded_fully_none.query()
 
     assert none_query is None
+
+    # Test 17
+
+
+async def test_yielded_daa_resonse(fixture_11):
+    """
+    Test write operations for functions that yield DataAssetArtifact with httpx.Response content
+
+     Fixture Purpose: Test write operations for functions that yield DataAssetArtifact with httpx.Response content
+
+     Acceptance Criteria:
+     1. Correct number of artifacts are created
+     2. Output is successfully created
+     3. Output has correct number of rows
+    """
+    fs = await get_fs()
+    json_paths = fs.glob("fixture_11/**/*.json")
+    assert json_paths
+    if json_paths:
+        expected_paths = [
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=112233/limit=100/offset=0.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=112233/limit=100/offset=100.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=112233/limit=100/offset=200.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=113322/limit=100/offset=0.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=113322/limit=100/offset=100.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=113322/limit=100/offset=200.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=221133/limit=100/offset=0.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=221133/limit=100/offset=100.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=221133/limit=100/offset=200.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=332211/limit=100/offset=0.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=332211/limit=100/offset=100.json",
+            "fixture_11/raw/eagles_yielded/sky_quadrant_id=332211/limit=100/offset=200.json",
+        ]
+
+        expected_record_count = 67
+
+        assert expected_paths == json_paths
+
+        last_artifact: dict = await fs.read_data(expected_paths[11])
+        record_count = len(last_artifact["eagles"])
+
+        assert record_count == expected_record_count
