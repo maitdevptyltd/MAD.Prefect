@@ -266,6 +266,7 @@ def fixture_10():
 
 @asset(
     path=f"fixture_11/bronze/eagles_yielded/data_asset_artifact.parquet",
+    name="eagles",
     snapshot_artifacts=False,
 )
 async def asset_bronze_eagles_yielded_response():
