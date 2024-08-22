@@ -79,11 +79,13 @@ class DataAssetArtifact:
         if _output_has_data(self.artifact):
             try:
                 await _write_asset_data(self.path, self.artifact)
-                self.data_written
+                self.data_written = True
             except:
                 raise ValueError(
                     f"Artifact write operation failed for artifact_id: {artifact_id}"
                 )
+        else:
+            print("No data written due to empty artifact")
 
         await self._write_artifact_metadata()
 
@@ -205,12 +207,11 @@ class DataAsset:
                 print(
                     f"An artifact for asset_id: {self.id} was written to path: \n {artifact.path}\n\n   "
                 )
+                artifact_glob.append(f"mad://{artifact.path}")
 
             # Update fragment_number if data is written & it is used in path
             if artifact.data_written and "fragment=" in str(artifact.path):
-                fragment_number = +1
-
-            artifact_glob.append(f"mad://{artifact.path}")
+                fragment_number += 1
 
         self.artifact_glob = artifact_glob
         return artifact_glob
@@ -220,7 +221,7 @@ class DataAsset:
         fs = await get_fs()
         await register_mad_protocol()
 
-        if fs.glob(artifact_glob):
+        if artifact_glob:
             duckdb.query("SET temp_directory = './.tmp/duckdb/'")
             folder_path = os.path.dirname(self.resolved_path)
             fs.mkdirs(folder_path, exist_ok=True)
