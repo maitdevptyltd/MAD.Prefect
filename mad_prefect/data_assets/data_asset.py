@@ -1,3 +1,4 @@
+from asyncio import iscoroutine
 from datetime import datetime, UTC
 import hashlib
 import inspect
@@ -146,7 +147,8 @@ class DataAsset:
         fragment_number = 1
         artifact_glob: list[str] = []
 
-        async for output in self.__fn(*args, **kwargs):
+        async def _handle_loop(output: object):
+            nonlocal fragment_number
             artifact = await self._handle_artifact(output, fragment_number)
 
             if artifact.data_written:
@@ -158,6 +160,13 @@ class DataAsset:
             # Update fragment_number if data is written & it is used in path
             if artifact.data_written and "fragment=" in str(artifact.path):
                 fragment_number += 1
+
+        if inspect.isasyncgenfunction(self.__fn):
+            async for output in self.__fn(*args, **kwargs):
+                await _handle_loop(output)
+        else:
+            for output in self.__fn(*args, **kwargs):
+                await _handle_loop(output)
 
         self.artifact_glob = artifact_glob
         return artifact_glob
@@ -189,7 +198,10 @@ class DataAsset:
 
     async def _handle_return(self, *args, **kwargs):
         # Call function to recieve output
-        output = await self.__fn(*args, **kwargs)
+        output = self.__fn(*args, **kwargs)
+
+        if inspect.iscoroutine(output):
+            output = await output
 
         # If nothing is return do not perform write operation
         if _output_has_data(output):
@@ -208,6 +220,9 @@ class DataAsset:
         output: object,
         fragment_number: int | None = None,
     ):
+        if inspect.iscoroutine(output):
+            output = await output
+
         if isinstance(output, DataArtifact):
             # If the output is already a DataAssetArtifact
             # use the input dir as base_path & httpx.Response params as params (if applicable)
