@@ -73,7 +73,7 @@ class DataAssetArtifact:
         self.asset_name = asset_name
         self.path = artifact_path
 
-        artifact_id = self._generate_artifact_guid
+        artifact_id = self._generate_artifact_guid()
         await self._write_artifact_metadata()
 
         if _output_has_data(self.artifact):
@@ -152,7 +152,7 @@ class DataAsset:
         self.last_created = self.runtime
 
         # Write metadata before processing result for troubleshooting purposes
-        await self.__register_asset()
+        await self.__save_run_metadata()
 
         # TODO: in future set up caching that reads from path
         # Instead of running self.__fn if data
@@ -169,7 +169,8 @@ class DataAsset:
             await self._handle_return(*self.args.args, **self.args.kwargs)
 
         # Write metadata
-        await self.__register_asset()
+        await self.__save_run_metadata()
+        return self
 
     async def query(self, query_str: str | None = None):
         await self()
@@ -180,19 +181,24 @@ class DataAsset:
 
         # # If asset has been created query the file
         if fs.glob(self.resolved_path):
-            asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.resolved_path}'")
-            duckdb.register(f"{self.resolved_name}_{self.id}", asset_query)
+            return self._get_self_query(query_str)
 
-            if not query_str:
-                return duckdb.query(f"SELECT * FROM {self.resolved_name}_{self.id}")
-            else:
-                directed_string = query_str.replace(
-                    self.resolved_name, f"{self.resolved_name}_{self.id}"
-                )
+        # TODO: let's throw an error for now, as self() executed and there should be data
+        # at the very least we should have an empty file?
+        raise ValueError(f"No data found for asset_id: {self.id}")
 
-            return duckdb.query(directed_string)
-        else:
-            return None
+    def _get_self_query(self, query_str: str | None = None):
+        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.resolved_path}'")
+        duckdb.register(f"{self.resolved_name}_{self.id}", asset_query)
+
+        if not query_str:
+            return duckdb.query(f"SELECT * FROM {self.resolved_name}_{self.id}")
+
+        directed_string = query_str.replace(
+            self.resolved_name, f"{self.resolved_name}_{self.id}"
+        )
+
+        return duckdb.query(directed_string)
 
     async def _handle_yield(self, *args, **kwargs):
         artifact_glob = await self._create_yield_artifacts(*args, **kwargs)
@@ -348,7 +354,7 @@ class DataAsset:
         hash_input = f"{self.resolved_name}:{self.resolved_path}:{self.resolved_artifacts_dir}:{self.runtime_str}:{str(self.args)}"
         return hashlib.md5(hash_input.encode()).hexdigest()
 
-    async def __register_asset(self):
+    async def __save_run_metadata(self):
         fs = await get_fs()
         asset_metadata = {
             "asset_run_id": self.run_id,
