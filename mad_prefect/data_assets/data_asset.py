@@ -1,93 +1,16 @@
 from datetime import datetime, UTC
 import hashlib
 import inspect
+from pkgutil import resolve_name
 from typing import Callable, cast
 import duckdb
 import httpx
-import pandas
+from mad_prefect.data_assets import ASSET_METADATA_LOCATION
+from mad_prefect.data_assets.data_artifact import DataArtifact
+from mad_prefect.data_assets.utils import _output_has_data, _write_asset_data
 from mad_prefect.filesystems import get_fs
 from mad_prefect.duckdb import register_mad_protocol
-import re
 import os
-
-ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", ".asset_metadata")
-
-
-class DataAssetArtifact:
-    def __init__(
-        self,
-        artifact: object,
-        dir: str,
-        asset_id: str | None = None,
-        asset_run_id: str | None = None,
-        asset_name: str | None = None,
-        path: str | None = None,
-        data_written: bool = False,
-    ):
-        self.artifact = artifact
-        self.dir = dir
-        self.asset_id = asset_id
-        self.asset_run_id = asset_run_id
-        self.asset_name = asset_name
-        self.path = path
-        self.data_written = data_written
-        pass
-
-    def _get_params(self):
-        params = (
-            dict(self.artifact.request.url.params)
-            if isinstance(self.artifact, httpx.Response)
-            and self.artifact.request.url.params
-            else None
-        )
-        return params
-
-    def _get_base_path(self):
-        return self.dir
-
-    def _generate_artifact_guid(self):
-        hash_input = f"{self.asset_id}:{self.asset_run_id}:{self.path}"
-        return hashlib.md5(hash_input.encode()).hexdigest()
-
-    async def _write_artifact_metadata(self):
-        fs = await get_fs()
-        artifact_id = self._generate_artifact_guid()
-        artifact_metadata = {
-            "artifact_id": artifact_id,
-            "asset_run_id": self.asset_run_id,
-            "asset_id": self.asset_id,
-            "artifact_path": self.path,
-            "artifact_written": self.data_written,
-        }
-
-        await fs.write_data(
-            f"{ASSET_METADATA_LOCATION}/asset_name={self.asset_name}/asset_id={self.asset_id}/asset_run_id={self.asset_run_id}/_artifacts/artifact_id={artifact_id}/metadata.json",
-            artifact_metadata,
-        )
-
-    async def _run_artifact(
-        self, asset_id: str, asset_run_id: str, asset_name: str, artifact_path: str
-    ):
-        self.asset_id = asset_id
-        self.asset_run_id = asset_run_id
-        self.asset_name = asset_name
-        self.path = artifact_path
-
-        artifact_id = self._generate_artifact_guid()
-        await self._write_artifact_metadata()
-
-        if _output_has_data(self.artifact):
-            try:
-                await _write_asset_data(self.path, self.artifact)
-                self.data_written = True
-            except:
-                raise ValueError(
-                    f"Artifact write operation failed for artifact_id: {artifact_id}"
-                )
-        else:
-            print("No data written due to empty artifact")
-
-        await self._write_artifact_metadata()
 
 
 class DataAsset:
@@ -130,9 +53,23 @@ class DataAsset:
         self.args_dict = dict(self.args.arguments)
 
         # Resolve (path, artifacts_dir, name) to insert template values
-        self.resolved_path = self._resolve_attribute(self.path)
-        self.resolved_artifacts_dir = self._resolve_attribute(self.artifacts_dir)
-        self.resolved_name = self._resolve_attribute(self.name)
+        resolved_path = self._resolve_attribute(self.path)
+        resolved_name = self._resolve_attribute(self.name)
+        resolved_artifacts_dir = self._resolve_attribute(self.artifacts_dir)
+
+        if not resolved_path:
+            raise ValueError(
+                f"Unable to resolve data asset path: {self.path} with {self.args_dict}."
+            )
+
+        if not resolved_name:
+            raise ValueError(
+                f"Unable to resolve data asset name: {self.name} with {self.args_dict}."
+            )
+
+        self.resolved_path = resolved_path
+        self.resolved_name = resolved_name
+        self.resolved_artifacts_dir = resolved_artifacts_dir
 
         # Generate identifiers
         self.id = self._generate_asset_guid()
@@ -225,7 +162,7 @@ class DataAsset:
         self.artifact_glob = artifact_glob
         return artifact_glob
 
-    async def _create_yield_output(self, artifact_glob: str):
+    async def _create_yield_output(self, artifact_glob: list[str]):
         # Set up filesystem abstraction
         fs = await get_fs()
         await register_mad_protocol()
@@ -267,9 +204,11 @@ class DataAsset:
                 self.artifact_glob = artifact.path
 
     async def _handle_artifact(
-        self, output: object, fragment_number: int | None = None
+        self,
+        output: object,
+        fragment_number: int | None = None,
     ):
-        if isinstance(output, DataAssetArtifact):
+        if isinstance(output, DataArtifact):
             # If the output is already a DataAssetArtifact
             # use the input dir as base_path & httpx.Response params as params (if applicable)
             artifact = output
@@ -284,7 +223,7 @@ class DataAsset:
                 else None
             )
             base_path = self._get_artifact_base_path()
-            artifact = DataAssetArtifact(artifact=output, dir=base_path)
+            artifact = DataArtifact(artifact=output, dir=base_path)
 
         path = self._build_artifact_path(base_path, params, fragment_number)
 
@@ -334,16 +273,16 @@ class DataAsset:
     def _get_filename(self):
         return os.path.splitext(os.path.basename(self.resolved_path))[0]
 
-    def _resolve_attribute(self, input_str: str = ""):
-        if not input_str:
+    def _resolve_attribute(self, input_str: str | None = None):
+        if not input_str or not self.args_dict:
             return input_str
-        if not self.args_dict:
-            return input_str
+
         param_names = [(f"{{{key}}}", key) for key in list(self.args_dict.keys())]
         for key_str, key in param_names:
             param_value = str(self.args_dict[f"{key}"])
             if param_value:
                 input_str = input_str.replace(key_str, param_value)
+
         return input_str
 
     def _generate_asset_guid(self):
@@ -380,52 +319,9 @@ class DataAsset:
         pass
 
 
-def _output_has_data(data: object):
-    if isinstance(data, httpx.Response):
-        # TODO: Create checking mechanism for raw text responses
-        check_result = True if data.json() else False
-
-    elif isinstance(data, duckdb.DuckDBPyRelation):
-        check_result = True if len(data.df()) else False
-
-    elif isinstance(data, pandas.DataFrame):
-        check_result = True if len(data) else False
-
-    else:
-        check_result = True if data else False
-
-    return check_result
-
-
-async def _write_asset_data(path: str, data: object):
-    fs = await get_fs()
-    await register_mad_protocol()
-
-    if isinstance(data, (duckdb.DuckDBPyRelation, pandas.DataFrame)):
-        # Before using COPY TO statement ensure directory exists
-        folder_path = os.path.dirname(path)
-        fs.mkdirs(folder_path, exist_ok=True)
-
-        json_format = "FORMAT JSON, ARRAY true," if ".json" in path else ""
-        duckdb.query("SET temp_directory = './.tmp/duckdb/'")
-        duckdb.query(
-            f"""
-                COPY(
-                    SELECT * FROM data
-                ) TO 'mad://{path}' ({json_format} use_tmp_file false)
-            """
-        )
-    elif isinstance(data, httpx.Response):
-        # TODO: Find way to process raw text responses
-        await fs.write_data(path, data.json())
-    else:
-        await fs.write_data(path, data)
-
-
 async def get_asset_metadata():
     fs = await get_fs()
     await register_mad_protocol()
-    ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", ".asset_metadata")
     if fs.glob(f"{ASSET_METADATA_LOCATION}/**/*.json"):
         metadata = duckdb.query(
             f"""
@@ -446,9 +342,6 @@ async def get_data_by_asset_name(asset_name: str):
     await register_mad_protocol()
     metadata = await get_asset_metadata()
     if metadata:
-        ASSET_METADATA_LOCATION = os.getenv(
-            "ASSET_METADATA_LOCATION", ".asset_metadata"
-        )
         ranked_asset_query = duckdb.query(
             f"""
             SELECT

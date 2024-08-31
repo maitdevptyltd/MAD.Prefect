@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 import duckdb
 from mad_prefect.data_assets import asset
-from mad_prefect.data_assets.data_asset import DataAssetArtifact
+from mad_prefect.data_assets.data_asset import DataArtifact
 from mad_prefect.duckdb import register_mad_protocol
 from tests.data_assets.sample_data.mock_api import get_api, ingest_endpoint
 from mad_prefect.filesystems import get_fs
@@ -17,11 +17,6 @@ def get_runtime(glob: list[str]):
     path = glob[0]
     runtime = path.split("runtime=")[1].split("/")[0]
     return runtime
-
-
-# Set up pytest
-pytest.register_assert_rewrite("pytest_asyncio")
-pytestmark = pytest.mark.asyncio
 
 
 # Set session timestamp as path prefix for test files
@@ -46,7 +41,12 @@ async def asset_bronze_organisations_return():
     Params Used: N/A - json
     Artifact Storage: Default
     """
+
     data = await get_api("organisations", {"limit": 3})
+
+    if not data:
+        raise ValueError("No data returned from API")
+
     return data["organisations"]
 
 
@@ -285,7 +285,7 @@ async def asset_bronze_eagles_yielded_response():
         async for output in ingest_endpoint(
             endpoint="eagles", return_type="api_response"
         ):
-            yield DataAssetArtifact(
+            yield DataArtifact(
                 output,
                 dir=f"fixture_11/raw/eagles_yielded/sky_quadrant_id={sky_quadrant_id}",
             )
