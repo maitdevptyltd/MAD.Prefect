@@ -25,8 +25,8 @@ class DataAsset:
     path: str
     artifacts_dir: str
     name: str
-    snapshot_artifacts: bool = False
-    asset_run: DataAssetRun = DataAssetRun()
+    snapshot_artifacts: bool
+    asset_run: DataAssetRun
 
     def __init__(
         self,
@@ -46,6 +46,7 @@ class DataAsset:
 
         self.id = self._generate_asset_guid()
 
+        self.asset_run = DataAssetRun()
         self.asset_run.id = self._generate_asset_iteration_guid()
         self.asset_run.asset_name = self.name
         self.asset_run.asset_path = self.path
@@ -102,6 +103,13 @@ class DataAsset:
         return self
 
     async def __call__(self, *args, **kwargs):
+        # TODO: upon the first time a data asset binds its arguments, should it create a new instance of a
+        # data asset? This will prevent 5 different assets which get injected parameters from overriding
+        # different valeus of each other. Not an issue now but be a potential race condition
+        if not self.__bound_arguments:
+            self._bind_arguments(*args, **kwargs)
+
+        assert self.__bound_arguments
         result_artifact = self._create_result_artifact()
 
         if self.asset_run and (materialized := self.asset_run.runtime):
@@ -110,14 +118,6 @@ class DataAsset:
             return result_artifact
 
         self.asset_run.runtime = datetime.now(UTC)
-
-        # TODO: upon the first time a data asset binds its arguments, should it create a new instance of a
-        # data asset? This will prevent 5 different assets which get injected parameters from overriding
-        # different valeus of each other. Not an issue now but be a potential race condition
-        if not self.__bound_arguments:
-            self._bind_arguments(*args, **kwargs)
-
-        assert self.__bound_arguments
 
         print(
             f"Running operations for asset_run_id: {self.asset_run.id}, on asset_id: {self.id}"
