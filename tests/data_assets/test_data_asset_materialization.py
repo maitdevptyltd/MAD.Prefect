@@ -4,7 +4,11 @@ from mad_prefect.data_assets import asset
 
 @asset("simple_asset.parquet")
 def simple_asset():
-    return [{"count": 1}, {"count": 5}, {"count": 10}]
+    return [
+        {"count": 1, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        {"count": 5, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        {"count": 10, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+    ]
 
 
 async def test_simple_asset():

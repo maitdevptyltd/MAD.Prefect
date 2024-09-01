@@ -1,5 +1,6 @@
 import os
 from typing import BinaryIO, cast
+import uuid
 import duckdb
 import httpx
 import jsonlines
@@ -69,6 +70,17 @@ class DataArtifact:
                     fetched_batch = batch_data.fetchmany(1000)
                     fetched_batch = [
                         dict(zip(batch_data.columns, row)) for row in fetched_batch
+                    ]
+
+                    # Convert UUID types to string
+                    # TODO: how can we register UUID with pyarrow? It will error out if we don't convert UUID to string.
+                    # Could not convert UUID('951c58e4-b9a4-4478-883e-22760064e416') with type UUID: did not recognize Python value type when inferring an Arrow data type
+                    fetched_batch = [
+                        {
+                            k: str(v) if isinstance(v, uuid.UUID) else v
+                            for k, v in row.items()
+                        }
+                        for row in fetched_batch
                     ]
 
                     if not fetched_batch:
