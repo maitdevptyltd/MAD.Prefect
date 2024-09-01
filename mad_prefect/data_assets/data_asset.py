@@ -19,7 +19,7 @@ import os
 class DataAsset:
     __fn: Callable
     __fn_signature: inspect.Signature
-    __bound_arguments: inspect.BoundArguments | None = None
+    __bound_arguments: inspect.BoundArguments | None
 
     id: str
     path: str
@@ -38,6 +38,7 @@ class DataAsset:
     ):
         self.__fn = fn
         self.__fn_signature = inspect.signature(fn)
+        self.__bound_arguments = None
 
         self.name = name if name else fn.__name__
         self.path = path
