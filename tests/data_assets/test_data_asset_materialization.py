@@ -38,7 +38,7 @@ async def test_when_data_asset_yields_another_data_asset():
 
 
 async def test_when_data_asset_takes_another_data_asset_as_parameter():
-    @asset("asset_with_asset_parameter.parquet")
+    @asset("asset_with_asset_parameter.{asset.name}.parquet")
     async def asset_with_param(asset: DataAsset):
         return asset
 

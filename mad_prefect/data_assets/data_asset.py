@@ -226,12 +226,7 @@ class DataAsset:
         if not input_str or not self.args_dict:
             return input_str
 
-        param_names = [(f"{{{key}}}", key) for key in list(self.args_dict.keys())]
-        for key_str, key in param_names:
-            param_value = str(self.args_dict[f"{key}"])
-            if param_value:
-                input_str = input_str.replace(key_str, param_value)
-
+        input_str = input_str.format(**self.args_dict)
         return input_str
 
     def _generate_asset_guid(self):
