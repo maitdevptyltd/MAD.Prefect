@@ -1,14 +1,14 @@
-from asyncio import iscoroutine
 from datetime import datetime, UTC
 import hashlib
 import inspect
-from pkgutil import resolve_name
 from typing import Callable, cast
 import duckdb
 import httpx
 from mad_prefect.data_assets import ASSET_METADATA_LOCATION
 from mad_prefect.data_assets.data_artifact import DataArtifact
-from mad_prefect.data_assets.utils import _output_has_data, _write_asset_data
+from mad_prefect.data_assets.utils import (
+    yield_data_batches,
+)
 from mad_prefect.filesystems import get_fs
 from mad_prefect.duckdb import register_mad_protocol
 import os
@@ -96,19 +96,45 @@ class DataAsset:
         # Instead of running self.__fn if data
         # Has been created within cache period
 
-        # Handle the fn differently depending on whether or not it yields
-        is_generator_fn = inspect.isasyncgenfunction(
-            self.__fn
-        ) or inspect.isgeneratorfunction(self.__fn)
+        # For each fragment in the data batch, we create a new artifact
+        base_artifact_path = self._get_artifact_base_path()
+        fragment_num = 0
+        artifacts: list[DataArtifact] = []
 
-        if is_generator_fn:
-            await self._handle_yield(*self.args.args, **self.args.kwargs)
-        else:
-            await self._handle_return(*self.args.args, **self.args.kwargs)
+        async for fragment in yield_data_batches(self.__fn(*args, **kwargs)):
+            # If the output isn't a DataAssetArtifact manually set the params & base_path
+            # and initialize the output as a DataAssetArtifact
+            params = (
+                dict(fragment.request.url.params)
+                if isinstance(fragment, httpx.Response) and fragment.request.url.params
+                else None
+            )
+
+            path = self._build_artifact_path(base_artifact_path, params, fragment_num)
+            fragment_artifact = DataArtifact(path, fragment)
+            await fragment_artifact.persist()
+
+            artifacts.append(fragment_artifact)
+            fragment_num += 1
+
+        globs = [f"mad://{a.path.strip('/')}" for a in artifacts]
+
+        # create the artifact for the data asset by glob querying all the artifacts together
+        duckdb.execute(
+            f"""
+                COPY (
+                SELECT *
+                FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
+                ) TO 'mad://{self.resolved_path}' (use_tmp_file false)
+
+            """
+        )
+
+        result_artifact = DataArtifact(self.resolved_path)
 
         # Write metadata
         await self.__save_run_metadata()
-        return self
+        return result_artifact
 
     async def query(self, query_str: str | None = None):
         await self()
@@ -137,120 +163,6 @@ class DataAsset:
         )
 
         return duckdb.query(directed_string)
-
-    async def _handle_yield(self, *args, **kwargs):
-        artifact_glob = await self._create_yield_artifacts(*args, **kwargs)
-        await self._create_yield_output(artifact_glob)
-
-    async def _create_yield_artifacts(self, *args, **kwargs):
-        # Set up starting artifact fragment_number
-        fragment_number = 1
-        artifact_glob: list[str] = []
-
-        async def _handle_loop(output: object):
-            nonlocal fragment_number
-            artifact = await self._handle_artifact(output, fragment_number)
-
-            if artifact.data_written:
-                print(
-                    f"An artifact for asset_id: {self.id} was written to path: \n {artifact.path}\n\n   "
-                )
-                artifact_glob.append(f"mad://{artifact.path}")
-
-            # Update fragment_number if data is written & it is used in path
-            if artifact.data_written and "fragment=" in str(artifact.path):
-                fragment_number += 1
-
-        if inspect.isasyncgenfunction(self.__fn):
-            async for output in self.__fn(*args, **kwargs):
-                await _handle_loop(output)
-        else:
-            for output in self.__fn(*args, **kwargs):
-                await _handle_loop(output)
-
-        self.artifact_glob = artifact_glob
-        return artifact_glob
-
-    async def _create_yield_output(self, artifact_glob: list[str]):
-        # Set up filesystem abstraction
-        fs = await get_fs()
-        await register_mad_protocol()
-
-        if artifact_glob:
-            duckdb.query("SET temp_directory = './.tmp/duckdb/'")
-            folder_path = os.path.dirname(self.resolved_path)
-            fs.mkdirs(folder_path, exist_ok=True)
-            duckdb.query(
-                f"""
-                    COPY (
-                    SELECT *
-                    FROM read_json_auto({artifact_glob}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
-                    ) TO 'mad://{self.resolved_path}' (use_tmp_file false)
-
-                """
-            )
-            self.data_written = True
-
-        else:
-            print(
-                f"No artifacts have been found for asset_id: {self.id}\n When using artifact glob: {artifact_glob}\n While attempting to write to {self.resolved_path}"
-            )
-
-    async def _handle_return(self, *args, **kwargs):
-        # Call function to recieve output
-        output = self.__fn(*args, **kwargs)
-
-        if inspect.iscoroutine(output):
-            output = await output
-
-        # If nothing is return do not perform write operation
-        if _output_has_data(output):
-            # Write output file to provided path
-            await _write_asset_data(self.resolved_path, output)
-
-            # TODO: Normalize artifact write process to align with _handle_yield
-            # Write raw json file to appropriate location
-            artifact = await self._handle_artifact(output)
-            if artifact.data_written:
-                self.data_written = True
-                self.artifact_glob = artifact.path
-
-    async def _handle_artifact(
-        self,
-        output: object,
-        fragment_number: int | None = None,
-    ):
-        if inspect.iscoroutine(output):
-            output = await output
-
-        if isinstance(output, DataArtifact):
-            # If the output is already a DataAssetArtifact
-            # use the input dir as base_path & httpx.Response params as params (if applicable)
-            artifact = output
-            params = output._get_params()
-            base_path = output._get_base_path()
-        else:
-            # If the output isn't a DataAssetArtifact manually set the params & base_path
-            # and initialize the output as a DataAssetArtifact
-            params = (
-                dict(output.request.url.params)
-                if isinstance(output, httpx.Response) and output.request.url.params
-                else None
-            )
-            base_path = self._get_artifact_base_path()
-            artifact = DataArtifact(artifact=output, dir=base_path)
-
-        path = self._build_artifact_path(base_path, params, fragment_number)
-
-        # This function will record artifact metadata and write the artifact to path
-        await artifact._run_artifact(
-            asset_id=self.id,
-            asset_run_id=self.run_id,
-            asset_name=self.name,
-            artifact_path=path,
-        )
-
-        return artifact
 
     def _build_artifact_path(
         self,
