@@ -53,6 +53,26 @@ class DataArtifact:
                 if table_or_batch:
                     b = table_or_batch.to_pylist()
 
+                    # json doesn't support datetime or UUID out the box, so sanitize it from pyarrow
+                    def sanitze_data(data):
+                        if isinstance(data, dict):
+                            return {k: (sanitze_data(v)) for k, v in data.items()}
+                        elif isinstance(data, list):
+                            return [sanitze_data(item) for item in data]
+                        elif isinstance(data, uuid.UUID):
+                            return str(data)
+
+                        # Parquet can handle dates, json doesn't by default
+                        # TODO: how do we register the date data type with jsonl?
+                        elif isinstance(data, datetime.datetime) or isinstance(
+                            data, datetime.date
+                        ):
+                            return data.isoformat()
+                        else:
+                            return data
+
+                    b = sanitze_data(b)
+
                 if not isinstance(b, Iterable):
                     b = [b]
 
@@ -63,14 +83,6 @@ class DataArtifact:
 
         try:
             async for b in self._yield_entities_to_persist():
-                columns = {}
-
-                # If its a tuple, extract the columns from the 2nd arg
-                # and make b equal the actual value
-                if isinstance(b, tuple):
-                    columns = b[1]
-                    b = b[0]
-
                 table_or_batch: pa.RecordBatch | pa.Table = (
                     b
                     if isinstance(b, (pa.Table, pa.RecordBatch))
@@ -141,29 +153,6 @@ class DataArtifact:
                     fetched_batch = [
                         dict(zip(batch_data.columns, row)) for row in fetched_batch
                     ]
-
-                    # Convert UUID types to string
-                    # TODO: how can we register UUID with pyarrow? It will error out if we don't convert UUID to string.
-                    # Could not convert UUID('951c58e4-b9a4-4478-883e-22760064e416') with type UUID: did not recognize Python value type when inferring an Arrow data type
-                    def sanitze_data(data):
-                        if isinstance(data, dict):
-                            return {k: (sanitze_data(v)) for k, v in data.items()}
-                        elif isinstance(data, list):
-                            return [sanitze_data(item) for item in data]
-                        elif isinstance(data, uuid.UUID):
-                            return str(data)
-
-                        # Parquet can handle dates, json doesn't by default
-                        # TODO: how do we register the date data type with jsonl?
-                        elif path_extension == ".json" and (
-                            isinstance(data, datetime.datetime)
-                            or isinstance(data, datetime.date)
-                        ):
-                            return data.isoformat()
-                        else:
-                            return data
-
-                    fetched_batch = sanitze_data(fetched_batch)
 
                     if not fetched_batch:
                         break
