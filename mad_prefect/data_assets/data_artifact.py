@@ -75,13 +75,22 @@ class DataArtifact:
                     # Convert UUID types to string
                     # TODO: how can we register UUID with pyarrow? It will error out if we don't convert UUID to string.
                     # Could not convert UUID('951c58e4-b9a4-4478-883e-22760064e416') with type UUID: did not recognize Python value type when inferring an Arrow data type
-                    fetched_batch = [
-                        {
-                            k: str(v) if isinstance(v, uuid.UUID) else v
-                            for k, v in row.items()
-                        }
-                        for row in fetched_batch
-                    ]
+                    def convert_uuid_to_string(data):
+                        if isinstance(data, dict):
+                            return {
+                                k: (
+                                    convert_uuid_to_string(v)
+                                    if isinstance(v, dict)
+                                    else (str(v) if isinstance(v, uuid.UUID) else v)
+                                )
+                                for k, v in data.items()
+                            }
+                        elif isinstance(data, list):
+                            return [convert_uuid_to_string(item) for item in data]
+                        else:
+                            return data
+
+                    fetched_batch = convert_uuid_to_string(fetched_batch)
 
                     if not fetched_batch:
                         break
