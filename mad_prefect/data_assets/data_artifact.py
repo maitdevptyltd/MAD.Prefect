@@ -22,6 +22,9 @@ class DataArtifact:
         self.data = data
 
     async def persist(self):
+        if not self.data:
+            return
+
         fs = await get_fs()
         await register_mad_protocol()
         duckdb.query("SET temp_directory = './.tmp/duckdb/'")
@@ -58,9 +61,6 @@ class DataArtifact:
             writer.write_batch(record_batch)
 
     async def _yield_entities_to_persist(self):
-        if not self.data:
-            return
-
         (_, path_extension) = os.path.splitext(self.path)
 
         async for batch_data in yield_data_batches(self.data):
