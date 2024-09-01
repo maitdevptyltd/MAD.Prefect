@@ -5,7 +5,6 @@ import json
 from typing import Callable
 import duckdb
 import httpx
-from mad_prefect.data_assets import ASSET_METADATA_LOCATION
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
 from mad_prefect.data_assets.utils import (

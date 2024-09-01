@@ -132,12 +132,7 @@ class DataArtifact:
                 batch_data = batch_data.query()
 
             if isinstance(batch_data, (duckdb.DuckDBPyRelation)):
-                columns = {
-                    col: type
-                    for idx, col in enumerate(batch_data.columns)
-                    for type in [batch_data.types[idx]]
-                }
-
+                # Convert duckdb into batches of arrow tables
                 while True:
                     batch = batch_data.fetch_arrow_table(1000)
 
@@ -145,19 +140,6 @@ class DataArtifact:
                         break
 
                     yield batch
-                    return
-
-                    # duckdb fetchmany returns a list of tuples
-                    # turn it into a list of dicts
-                    fetched_batch = batch_data.fetchmany(1000)
-                    fetched_batch = [
-                        dict(zip(batch_data.columns, row)) for row in fetched_batch
-                    ]
-
-                    if not fetched_batch:
-                        break
-
-                    yield fetched_batch, columns
 
             elif isinstance(batch_data, httpx.Response):
                 yield batch_data.json()
