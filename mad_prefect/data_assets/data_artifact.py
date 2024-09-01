@@ -60,6 +60,9 @@ class DataArtifact:
             # Use the first entity to determine the file's schema
             if not writer:
                 writer = pq.ParquetWriter(file, record_batch.schema)
+            else:
+                new_schema = pa.unify_schemas([writer.schema, record_batch.schema])
+                writer.schema = new_schema
 
             writer.write_batch(record_batch)
 
