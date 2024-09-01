@@ -6,7 +6,7 @@ ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", ".asset_metadata"
 
 def asset(
     path: str,
-    artifacts_dir: str | None = None,
+    artifacts_dir: str = "",
     name: str | None = None,
     snapshot_artifacts: bool = False,
 ):

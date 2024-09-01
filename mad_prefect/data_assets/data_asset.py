@@ -2,11 +2,12 @@ from datetime import datetime, UTC
 import hashlib
 import inspect
 import json
-from typing import Callable, cast
+from typing import Callable
 import duckdb
 import httpx
 from mad_prefect.data_assets import ASSET_METADATA_LOCATION
 from mad_prefect.data_assets.data_artifact import DataArtifact
+from mad_prefect.data_assets.data_asset_run import DataAssetRun
 from mad_prefect.data_assets.utils import (
     yield_data_batches,
 )
@@ -16,26 +17,38 @@ import os
 
 
 class DataAsset:
+    __fn: Callable
+    __fn_signature: inspect.Signature
+    __bound_arguments: inspect.BoundArguments | None = None
+
+    id: str
+    path: str
+    artifacts_dir: str
+    name: str
+    snapshot_artifacts: bool = False
+    asset_run: DataAssetRun = DataAssetRun()
 
     def __init__(
         self,
         fn: Callable,
         path: str,
-        artifacts_dir: str | None = "",
+        artifacts_dir: str = "",
         name: str | None = None,
         snapshot_artifacts: bool = False,
     ):
         self.__fn = fn
+        self.__fn_signature = inspect.signature(fn)
+
+        self.name = name if name else fn.__name__
         self.path = path
         self.artifacts_dir = artifacts_dir
-        self.name = name if name else fn.__name__
         self.snapshot_artifacts = snapshot_artifacts
-        self.fn_name = fn.__name__
-        self.fn_signature = inspect.signature(fn)
-        self.runtime_str = None
-        self.last_materialized = None
 
-        self.bound_arguments = cast(inspect.BoundArguments | None, None)
+        self.id = self._generate_asset_guid()
+
+        self.asset_run.id = self._generate_asset_iteration_guid()
+        self.asset_run.asset_name = self.name
+        self.asset_run.asset_path = self.path
 
     def with_arguments(self, *args, **kwargs):
         asset = DataAsset(
@@ -50,55 +63,65 @@ class DataAsset:
         return asset
 
     def _bind_arguments(self, *args, **kwargs):
-        self.bound_arguments = self.fn_signature.bind(*args, **kwargs)
-        self.bound_arguments.apply_defaults()
+        self.__bound_arguments = self.__fn_signature.bind(*args, **kwargs)
+        self.__bound_arguments.apply_defaults()
 
-        self.args = self.bound_arguments
-        self.args_dict = dict(self.args.arguments)
+        args = self.__bound_arguments
+        args_dict = dict(args.arguments)
 
         # Resolve (path, artifacts_dir, name) to insert template values
         resolved_path = self._resolve_attribute(self.path)
         resolved_name = self._resolve_attribute(self.name)
-        resolved_artifacts_dir = self._resolve_attribute(self.artifacts_dir)
+        resolved_artifacts_dir = self._resolve_attribute(self.artifacts_dir) or ""
 
         if not resolved_path:
             raise ValueError(
-                f"Unable to resolve data asset path: {self.path} with {self.args_dict}."
+                f"Unable to resolve data asset path: {self.path} with {args_dict}."
             )
 
         if not resolved_name:
             raise ValueError(
-                f"Unable to resolve data asset name: {self.name} with {self.args_dict}."
+                f"Unable to resolve data asset name: {self.name} with {args_dict}."
             )
 
         self.path = resolved_path
         self.name = resolved_name
         self.artifacts_dir = resolved_artifacts_dir
 
+        def _handle_unknown_types(data):
+            if isinstance(data, DataAsset):
+                return {"name": self.name, "fn": self.__fn}
+
+        # Recalculate the ids incase the parameters have changed
+        self.id = self.asset_run.asset_id = self._generate_asset_guid()
+        self.asset_run.id = self._generate_asset_iteration_guid()
+        self.asset_run.asset_path = self.path
+        self.asset_run.asset_name = self.name
+        self.asset_run.parameters = json.dumps(args_dict, default=_handle_unknown_types)
+
         return self
 
     async def __call__(self, *args, **kwargs):
-        # Set runtime
-        self.runtime = datetime.now(UTC)
-        self.runtime_str = self.runtime.isoformat().replace(":", "_")
+        result_artifact = self._create_result_artifact()
 
-        if not self.bound_arguments:
+        if self.asset_run and (materialized := self.asset_run.runtime):
+            # TODO: implement some sort of thoughtful caching. At the moment
+            # this will just prevent the asset from rematerializing during the same session
+            return result_artifact
+
+        self.asset_run.runtime = datetime.now(UTC)
+
+        # TODO: upon the first time a data asset binds its arguments, should it create a new instance of a
+        # data asset? This will prevent 5 different assets which get injected parameters from overriding
+        # different valeus of each other. Not an issue now but be a potential race condition
+        if not self.__bound_arguments:
             self._bind_arguments(*args, **kwargs)
 
-        # Generate identifiers
-        self.id = self._generate_asset_guid()
-        self.run_id = self._generate_asset_iteration_guid()
+        assert self.__bound_arguments
 
         print(
-            f"Running operations for asset_run_id: {self.run_id}, on asset_id: {self.id}"
+            f"Running operations for asset_run_id: {self.asset_run.id}, on asset_id: {self.id}"
         )
-
-        self.data_written: bool = False
-
-        # TODO: set up function that examines metadata to extract
-        # last_created timestamp
-        # For now use runtime as placeholder
-        self.last_created = self.runtime
 
         # Write metadata before processing result for troubleshooting purposes
         await self.__save_run_metadata()
@@ -119,7 +142,7 @@ class DataAsset:
         artifacts: list[DataArtifact] = []
 
         async for fragment in yield_data_batches(
-            self.__fn(*self.args.args, **self.args.kwargs)
+            self.__fn(*self.__bound_arguments.args, **self.__bound_arguments.kwargs)
         ):
             # If the output isn't a DataAssetArtifact manually set the params & base_path
             # and initialize the output as a DataAssetArtifact
@@ -139,21 +162,21 @@ class DataAsset:
         globs = [f"mad://{a.path.strip('/')}" for a in artifacts]
 
         # create the artifact for the data asset by glob querying all the artifacts together
-        result_artifact = DataArtifact(
-            self.path,
-            (
-                duckdb.query(
-                    f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
-                )
-                if globs
-                else None
-            ),
+        result_artifact.data = (
+            duckdb.query(
+                f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
+            )
+            if globs
+            else None
         )
 
         await result_artifact.persist()
         await self.__save_run_metadata()
 
         return result_artifact
+
+    def _create_result_artifact(self):
+        return DataArtifact(self.path)
 
     async def query(self, query_str: str | None = None):
         await self()
@@ -191,9 +214,9 @@ class DataAsset:
 
         # If we snapshot artifacts, encapsulate the file in a directory with the runtime= parameter
         # so you can view changes over time
-        if self.snapshot_artifacts:
+        if self.snapshot_artifacts and self.asset_run.runtime:
             prefix = (
-                f"year={self.runtime.year}/month={self.runtime.month}/day={self.runtime.day}/runtime={self.runtime_str}/"
+                f"year={self.asset_run.runtime.year}/month={self.asset_run.runtime.month}/day={self.asset_run.runtime.day}/runtime={self.asset_run.runtime.isoformat()}/"
                 if self.snapshot_artifacts
                 else ""
             )
@@ -225,97 +248,24 @@ class DataAsset:
         return os.path.splitext(os.path.basename(self.path))[0]
 
     def _resolve_attribute(self, input_str: str | None = None):
-        if not input_str or not self.args_dict:
+        if not input_str or not self.__bound_arguments:
             return input_str
 
-        input_str = input_str.format(**self.args_dict)
+        input_str = input_str.format(**self.__bound_arguments.arguments)
         return input_str
 
     def _generate_asset_guid(self):
-        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self.args)}"
+        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self.__bound_arguments.arguments) if self.__bound_arguments else ''}"
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     def _generate_asset_iteration_guid(self):
-        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.runtime_str}:{str(self.args)}"
+        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.asset_run.runtime.isoformat() if self.asset_run.runtime else ''}:{str(self.__bound_arguments.arguments) if self.__bound_arguments else ''}"
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     async def __save_run_metadata(self):
-        def _handle_unknown_types(data):
-            if isinstance(data, DataAsset):
-                return {"name": self.name, "fn": self.__fn}
-
         fs = await get_fs()
-        asset_metadata = {
-            "run_id": self.run_id,
-            "id": self.id,
-            "name": self.name,
-            "fn_name": self.fn_name,
-            "parameters": json.dumps(self.args_dict, default=_handle_unknown_types),
-            "path": self.path,
-            "runtime_str": self.runtime_str,
-            "data_written": self.data_written,
-        }
 
         await fs.write_data(
-            f"{ASSET_METADATA_LOCATION}/asset_name={self.name}/asset_id={self.id}/asset_run_id={self.run_id}/metadata.json",
-            asset_metadata,
+            f"{ASSET_METADATA_LOCATION}/asset_name={self.name}/asset_id={self.id}/asset_run_id={self.asset_run.id}/metadata.json",
+            self.asset_run,
         )
-
-
-async def get_asset_metadata():
-    fs = await get_fs()
-    await register_mad_protocol()
-    if fs.glob(f"{ASSET_METADATA_LOCATION}/**/*.json"):
-        metadata = duckdb.query(
-            f"""
-                SELECT * 
-                FROM read_json_auto('mad://{ASSET_METADATA_LOCATION}/**/*.json')
-                ORDER BY
-                    runtime DESC,
-                    asset_id ASC
-            """
-        )
-        duckdb.query(
-            f"COPY (SELECT * FROM metadata) TO 'mad://{ASSET_METADATA_LOCATION}/metadata_binding.parquet' (use_tmp_file false)"
-        )
-        return metadata
-
-
-async def get_data_by_asset_name(asset_name: str):
-    await register_mad_protocol()
-    metadata = await get_asset_metadata()
-    if metadata:
-        ranked_asset_query = duckdb.query(
-            f"""
-            SELECT
-                asset_id,
-                artifact_glob,
-                runtime,
-                ROW_NUMBER() OVER(PARTITION BY asset_id ORDER BY runtime DESC) as rn
-            FROM 'mad://{ASSET_METADATA_LOCATION}/metadata_binding.parquet'
-            WHERE asset_name = '{asset_name}' 
-                AND data_written = 'true'
-                AND artifact_glob IS NOT NULL
-            """
-        )
-        row_tuples = duckdb.query(
-            """
-            SELECT 
-                artifact_glob 
-            FROM ranked_asset_query
-            WHERE rn = 1
-            """
-        ).fetchall()
-
-        artifact_globs = [f"mad://{artifact_glob[0]}" for artifact_glob in row_tuples]
-    else:
-        artifact_globs = None
-        print("No metadata found.")
-
-    if artifact_globs:
-        full_data_set = duckdb.query(
-            f"SELECT * FROM read_json_auto({artifact_globs}, union_by_name = true, maximum_object_size = 33554432)"
-        )
-        return full_data_set
-    else:
-        print(f"No artifact globs found for {asset_name}")

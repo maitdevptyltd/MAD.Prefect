@@ -52,9 +52,9 @@ def register_mad_filesystem(connection: duckdb.DuckDBPyConnection | None = None)
     fs = MadFileSystem(FILESYSTEM_URL)
 
     if connection:
-        connection.register_filesystem(fs)
+        connection.register_filesystem(cast(str, fs))
     else:
-        duckdb.register_filesystem(fs)
+        duckdb.register_filesystem(cast(str, fs))
 
 
 async def register_mad_protocol(connection: duckdb.DuckDBPyConnection | None = None):
@@ -62,6 +62,6 @@ async def register_mad_protocol(connection: duckdb.DuckDBPyConnection | None = N
     mad_fs = MadFileSystem(fs.basepath, fs.storage_options)
 
     if connection:
-        connection.register_filesystem(mad_fs)
+        connection.register_filesystem(cast(str, mad_fs))
     else:
-        duckdb.register_filesystem(mad_fs)
+        duckdb.register_filesystem(cast(str, mad_fs))
