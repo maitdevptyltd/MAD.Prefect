@@ -54,27 +54,33 @@ class DataArtifact:
     async def _persist_parquet(self, file: BinaryIO):
         writer: pq.ParquetWriter | None = None
 
-        async for b in self._yield_entities_to_persist():
-            record_batch: pa.RecordBatch = pa.RecordBatch.from_pylist(b)
+        try:
+            async for b in self._yield_entities_to_persist():
+                record_batch: pa.RecordBatch = pa.RecordBatch.from_pylist(b)
 
-            # Use the first entity to determine the file's schema
-            if not writer:
-                writer = pq.ParquetWriter(file, record_batch.schema)
-            else:
-                # If schema has evolved, adjust the current RecordBatch
-                if not record_batch.schema.equals(writer.schema):
-                    unified_schema = pa.unify_schemas(
-                        [writer.schema, record_batch.schema],
-                        promote_options="permissive",
-                    )
+                # Use the first entity to determine the file's schema
+                if not writer:
+                    writer = pq.ParquetWriter(file, record_batch.schema)
+                else:
+                    # If schema has evolved, adjust the current RecordBatch
+                    if not record_batch.schema.equals(writer.schema):
+                        unified_schema = pa.unify_schemas(
+                            [writer.schema, record_batch.schema],
+                            promote_options="permissive",
+                        )
 
-                    # Align the RecordBatch with the unified schema
-                    record_batch = record_batch.cast(unified_schema)
+                        # Align the RecordBatch with the unified schema
+                        record_batch = record_batch.cast(unified_schema)
 
-                    # Manually adjust the schema of the writer if needed
-                    writer.schema = unified_schema
+                        # Manually adjust the schema of the writer if needed
+                        writer.schema = unified_schema
 
-            writer.write_batch(record_batch)
+                writer.write_batch(record_batch)
+        except Exception as e:
+            raise
+        finally:
+            if writer:
+                writer.close()
 
     async def _yield_entities_to_persist(self):
         from mad_prefect.data_assets.data_asset import DataAsset
