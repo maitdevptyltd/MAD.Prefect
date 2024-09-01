@@ -8,7 +8,7 @@ def asset(
     path: str,
     artifacts_dir: str | None = None,
     name: str | None = None,
-    snapshot_artifacts: bool = True,
+    snapshot_artifacts: bool = False,
 ):
     # Prevent a circular reference as it references the env variable
     from mad_prefect.data_assets.data_asset import DataAsset

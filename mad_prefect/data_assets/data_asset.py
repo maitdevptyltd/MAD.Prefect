@@ -22,7 +22,7 @@ class DataAsset:
         path: str,
         artifacts_dir: str | None = "",
         name: str | None = None,
-        snapshot_artifacts: bool = True,
+        snapshot_artifacts: bool = False,
     ):
         self.__fn = fn
         self.path = path
@@ -37,7 +37,13 @@ class DataAsset:
         self.bound_arguments = cast(inspect.BoundArguments | None, None)
 
     def with_arguments(self, *args, **kwargs):
-        asset = DataAsset(self.__fn, self.path, self.artifacts_dir, self.name)
+        asset = DataAsset(
+            self.__fn,
+            self.path,
+            self.artifacts_dir,
+            self.name,
+            self.snapshot_artifacts,
+        )
         asset.bound_arguments = asset.fn_signature.bind(*args, **kwargs)
         asset.bound_arguments.apply_defaults()
 
@@ -98,6 +104,12 @@ class DataAsset:
 
         # For each fragment in the data batch, we create a new artifact
         base_artifact_path = self._get_artifact_base_path()
+
+        # Clean up the old directory and delete it if we're not snapshotting
+        if not self.snapshot_artifacts:
+            fs = await get_fs()
+            await fs.delete_path(base_artifact_path, recursive=True)
+
         fragment_num = 0
         artifacts: list[DataArtifact] = []
 
@@ -172,20 +184,23 @@ class DataAsset:
         params: dict | None = None,
         fragment_number: int | None = None,
     ):
-        asset_runtime_str = (
-            f"runtime={self.runtime_str}/" if self.snapshot_artifacts else ""
-        )
+        prefix = ""
+
+        # If we snapshot artifacts, encapsulate the file in a directory with the runtime= parameter
+        # so you can view changes over time
+        if self.snapshot_artifacts:
+            prefix = f"runtime={self.runtime_str}/" if self.snapshot_artifacts else ""
 
         if params is None and fragment_number is None:
             filename = self._get_filename()
-            return f"{base_path}/{asset_runtime_str}{filename}.json"
+            return f"{base_path}/{prefix}{filename}.json"
 
         if params is None:
-            return f"{base_path}/{asset_runtime_str}fragment={fragment_number}.json"
+            return f"{base_path}/{prefix}fragment={fragment_number}.json"
 
         params_path = "/".join(f"{key}={value}" for key, value in params.items())
 
-        return f"{base_path}/{asset_runtime_str}{params_path}.json"
+        return f"{base_path}/{prefix}{params_path}.json"
 
     def _get_artifact_base_path(self):
         # Extract folder path for folder set up
@@ -193,7 +208,7 @@ class DataAsset:
 
         # Set up the base path for artifact storage
         if not self.resolved_artifacts_dir:
-            base_path: str = f"{folder_path}/_artifacts"
+            base_path: str = f"{folder_path}/_artifacts/asset={self.name}"
         else:
             base_path: str = self.resolved_artifacts_dir
 
