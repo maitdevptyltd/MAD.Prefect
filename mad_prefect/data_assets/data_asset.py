@@ -124,8 +124,12 @@ class DataAsset:
         # create the artifact for the data asset by glob querying all the artifacts together
         result_artifact = DataArtifact(
             self.resolved_path,
-            duckdb.query(
-                f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
+            (
+                duckdb.query(
+                    f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
+                )
+                if globs
+                else []
             ),
         )
 
