@@ -1,6 +1,7 @@
 from datetime import datetime, UTC
 import hashlib
 import inspect
+import json
 from typing import Callable, cast
 import duckdb
 import httpx
@@ -242,13 +243,17 @@ class DataAsset:
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     async def __save_run_metadata(self):
+        def _handle_unknown_types(data):
+            if isinstance(data, DataAsset):
+                return {"name": self.name, "fn": self.__fn}
+
         fs = await get_fs()
         asset_metadata = {
             "asset_run_id": self.run_id,
             "asset_id": self.id,
             "asset_name": self.resolved_name,
             "fn_name": self.fn_name,
-            "parameters": self.args_dict,
+            "parameters": json.dumps(self.args_dict, default=_handle_unknown_types),
             "output_path": self.resolved_path,
             "runtime": self.runtime_str,
             "data_written": self.data_written,
@@ -259,12 +264,6 @@ class DataAsset:
             f"{ASSET_METADATA_LOCATION}/asset_name={self.resolved_name}/asset_id={self.id}/asset_run_id={self.run_id}/metadata.json",
             asset_metadata,
         )
-
-    def __getstate__(self):
-        pass
-
-    def __setstate__(self, query: str):
-        pass
 
 
 async def get_asset_metadata():

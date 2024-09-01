@@ -1,5 +1,6 @@
 import duckdb
 from mad_prefect.data_assets import asset
+from mad_prefect.data_assets.data_asset import DataAsset
 
 
 @asset("simple_asset.parquet")
@@ -34,3 +35,11 @@ async def test_when_data_asset_yields_another_data_asset():
 
     # Because composed adds 5 as a new array, there should be 6 in the array total
     assert count_query_result[0] == 6
+
+
+async def test_when_data_asset_takes_another_data_asset_as_parameter():
+    @asset("asset_with_asset_parameter.parquet")
+    async def asset_with_param(asset: DataAsset):
+        return asset
+
+    await asset_with_param(simple_asset)

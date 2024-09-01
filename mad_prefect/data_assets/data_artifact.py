@@ -61,9 +61,15 @@ class DataArtifact:
             writer.write_batch(record_batch)
 
     async def _yield_entities_to_persist(self):
+        from mad_prefect.data_assets.data_asset import DataAsset
+
         (_, path_extension) = os.path.splitext(self.path)
 
         async for batch_data in yield_data_batches(self.data):
+            # If the data is an asset, execute it to get the result artifact
+            if isinstance(batch_data, DataAsset):
+                batch_data = await batch_data()
+
             # If the entity is a DataAsset, turn it into a DuckDbPyRelation, so it can be handled
             if isinstance(batch_data, DataArtifact):
                 # An artifact may not exist for example when there were no results
