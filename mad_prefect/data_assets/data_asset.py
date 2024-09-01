@@ -101,7 +101,9 @@ class DataAsset:
         fragment_num = 0
         artifacts: list[DataArtifact] = []
 
-        async for fragment in yield_data_batches(self.__fn(*args, **kwargs)):
+        async for fragment in yield_data_batches(
+            self.__fn(*self.args.args, **self.args.kwargs)
+        ):
             # If the output isn't a DataAssetArtifact manually set the params & base_path
             # and initialize the output as a DataAssetArtifact
             params = (
