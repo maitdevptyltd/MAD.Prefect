@@ -189,7 +189,11 @@ class DataAsset:
         # If we snapshot artifacts, encapsulate the file in a directory with the runtime= parameter
         # so you can view changes over time
         if self.snapshot_artifacts:
-            prefix = f"runtime={self.runtime_str}/" if self.snapshot_artifacts else ""
+            prefix = (
+                f"year={self.runtime.year}/month={self.runtime.month}/day={self.runtime.day}/runtime={self.runtime_str}/"
+                if self.snapshot_artifacts
+                else ""
+            )
 
         if params is None and fragment_number is None:
             filename = self._get_filename()
