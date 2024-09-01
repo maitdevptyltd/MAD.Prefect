@@ -122,20 +122,16 @@ class DataAsset:
         globs = [f"mad://{a.path.strip('/')}" for a in artifacts]
 
         # create the artifact for the data asset by glob querying all the artifacts together
-        duckdb.execute(
-            f"""
-                COPY (
-                SELECT *
-                FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)
-                ) TO 'mad://{self.resolved_path}' (use_tmp_file false)
-
-            """
+        result_artifact = DataArtifact(
+            self.resolved_path,
+            duckdb.query(
+                f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
+            ),
         )
 
-        result_artifact = DataArtifact(self.resolved_path)
-
-        # Write metadata
+        await result_artifact.persist()
         await self.__save_run_metadata()
+
         return result_artifact
 
     async def query(self, query_str: str | None = None):
