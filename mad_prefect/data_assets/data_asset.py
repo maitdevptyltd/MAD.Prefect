@@ -129,7 +129,7 @@ class DataAsset:
                     f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
                 )
                 if globs
-                else []
+                else None
             ),
         )
 
