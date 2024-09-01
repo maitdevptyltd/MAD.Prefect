@@ -112,7 +112,7 @@ class DataAsset:
         assert self.__bound_arguments
         result_artifact = self._create_result_artifact()
 
-        if self.asset_run and (materialized := self.asset_run.runtime):
+        if self.asset_run and (materialized := self.asset_run.materialized):
             # TODO: implement some sort of thoughtful caching. At the moment
             # this will just prevent the asset from rematerializing during the same session
             return result_artifact
@@ -124,7 +124,7 @@ class DataAsset:
         )
 
         # Write metadata before processing result for troubleshooting purposes
-        await self.__save_run_metadata()
+        await self.asset_run.persist()
 
         # TODO: in future set up caching that reads from path
         # Instead of running self.__fn if data
@@ -171,7 +171,11 @@ class DataAsset:
         )
 
         await result_artifact.persist()
-        await self.__save_run_metadata()
+        self.asset_run.materialized = datetime.now(UTC)
+        self.asset_run.duration_miliseconds = int(
+            (self.asset_run.materialized - self.asset_run.runtime).microseconds / 1000
+        )
+        await self.asset_run.persist()
 
         return result_artifact
 
@@ -261,11 +265,3 @@ class DataAsset:
     def _generate_asset_iteration_guid(self):
         hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.asset_run.runtime.isoformat() if self.asset_run.runtime else ''}:{str(self.__bound_arguments.arguments) if self.__bound_arguments else ''}"
         return hashlib.md5(hash_input.encode()).hexdigest()
-
-    async def __save_run_metadata(self):
-        fs = await get_fs()
-
-        await fs.write_data(
-            f"{ASSET_METADATA_LOCATION}/asset_name={self.name}/asset_id={self.id}/asset_run_id={self.asset_run.id}/metadata.json",
-            self.asset_run,
-        )
