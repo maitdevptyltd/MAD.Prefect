@@ -51,6 +51,9 @@ class FsspecFileSystem(
     def mkdirs(self, path: str, exist_ok: bool = False):
         self._fs.mkdirs(self._resolve_path(path), exist_ok=exist_ok)
 
+    def exists(self, path: str):
+        return self._fs.exists(self._resolve_path(path))
+
     @prefect.utilities.asyncutils.sync_compatible
     async def read_path(self, path: str) -> bytes:
         path = self._resolve_path(path)

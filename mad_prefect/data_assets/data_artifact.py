@@ -66,6 +66,10 @@ class DataArtifact:
         async for batch_data in yield_data_batches(self.data):
             # If the entity is a DataAsset, turn it into a DuckDbPyRelation, so it can be handled
             if isinstance(batch_data, DataArtifact):
+                # An artifact may not exist for example when there were no results
+                if not batch_data.exists():
+                    continue
+
                 batch_data = batch_data.query()
 
             if isinstance(batch_data, (duckdb.DuckDBPyRelation)):
@@ -118,3 +122,7 @@ class DataArtifact:
             return duckdb.query(f"FROM asset_query {query_str}")
 
         return asset_query
+
+    def exists(self):
+        fs = await get_fs()
+        return fs.exists(self.path)
