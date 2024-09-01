@@ -1,3 +1,4 @@
+import datetime
 import os
 from typing import BinaryIO, cast
 import uuid
@@ -57,6 +58,8 @@ class DataArtifact:
             writer.write_batch(record_batch)
 
     async def _yield_entities_to_persist(self):
+        (_, path_extension) = os.path.splitext(self.path)
+
         async for batch_data in yield_data_batches(self.data):
             # If the entity is a DataAsset, turn it into a DuckDbPyRelation, so it can be handled
             if isinstance(batch_data, DataArtifact):
@@ -82,6 +85,14 @@ class DataArtifact:
                             return [sanitze_data(item) for item in data]
                         elif isinstance(data, uuid.UUID):
                             return str(data)
+
+                        # Parquet can handle dates, json doesn't by default
+                        # TODO: how do we register the date data type with jsonl?
+                        elif path_extension == ".json" and (
+                            isinstance(data, datetime.datetime)
+                            or isinstance(data, datetime.date)
+                        ):
+                            return data.isoformat()
                         else:
                             return data
 
