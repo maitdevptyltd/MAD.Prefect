@@ -133,13 +133,15 @@ class DataArtifact:
 
             if isinstance(batch_data, (duckdb.DuckDBPyRelation)):
                 # Convert duckdb into batches of arrow tables
+                reader = batch_data.fetch_arrow_reader(1000)
+
                 while True:
-                    batch = batch_data.fetch_arrow_table(1000)
-
-                    if not batch:
+                    try:
+                        # this will yield a pyarrow RecordBatch
+                        batch = reader.read_next_batch()
+                        yield batch
+                    except StopIteration as stop:
                         break
-
-                    yield batch
 
             elif isinstance(batch_data, httpx.Response):
                 yield batch_data.json()
