@@ -43,3 +43,28 @@ async def test_when_data_asset_takes_another_data_asset_as_parameter():
         return asset
 
     await asset_with_param(simple_asset)
+
+
+async def test_when_data_asset_yields_multiple_lists():
+    @asset("multiple_lists_asset.parquet")
+    async def multiple_lists_asset():
+        yield [
+            {"count": 1, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 5, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+        yield [
+            {"count": 10, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 15, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+
+    multiple_lists_asset_query = await multiple_lists_asset.query(
+        "SELECT * FROM multiple_lists_asset"
+    )
+    count_query_result = duckdb.query(
+        "SELECT COUNT(*) c FROM multiple_lists_asset_query"
+    ).fetchone()
+
+    assert count_query_result
+
+    # The total count should be 4 since there are 4 rows in the output parquet
+    assert count_query_result[0] == 4

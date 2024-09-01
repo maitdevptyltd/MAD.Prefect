@@ -1,6 +1,6 @@
 import datetime
 import os
-from typing import BinaryIO, cast
+from typing import BinaryIO, Iterable, cast
 import uuid
 import duckdb
 import httpx
@@ -46,7 +46,10 @@ class DataArtifact:
         # The file can be written in batches for better memory management
         with jsonlines.Writer(file) as writer:
             async for b in self._yield_entities_to_persist():
-                writer.write(b)
+                if not isinstance(b, Iterable):
+                    b = [b]
+
+                writer.write_all(b)
 
     async def _persist_parquet(self, file: BinaryIO):
         writer: pq.ParquetWriter | None = None
