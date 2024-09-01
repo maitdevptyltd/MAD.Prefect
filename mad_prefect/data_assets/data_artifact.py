@@ -61,8 +61,18 @@ class DataArtifact:
             if not writer:
                 writer = pq.ParquetWriter(file, record_batch.schema)
             else:
-                new_schema = pa.unify_schemas([writer.schema, record_batch.schema])
-                writer.schema = new_schema
+                # If schema has evolved, adjust the current RecordBatch
+                if not record_batch.schema.equals(writer.schema):
+                    unified_schema = pa.unify_schemas(
+                        [writer.schema, record_batch.schema],
+                        promote_options="permissive",
+                    )
+
+                    # Align the RecordBatch with the unified schema
+                    record_batch = record_batch.cast(unified_schema)
+
+                    # Manually adjust the schema of the writer if needed
+                    writer.schema = unified_schema
 
             writer.write_batch(record_batch)
 

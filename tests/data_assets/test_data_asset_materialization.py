@@ -81,12 +81,17 @@ async def test_when_data_asset_schema_evolution():
     @asset("schema_evolution_asset_2.parquet")
     async def schema_evolution_asset_2():
         yield [
-            {"count": 10, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {
+                "count": 10,
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+                "broken": {"value": None},
+            },
             {"count": 15, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
             {
                 "count": 20,
                 "id": "951c58e4-b9a4-4478-883e-22760064e416",
                 "extra_field": "extra_value",
+                "broken": {"value": "oh hellooo"},
             },
         ]
 
