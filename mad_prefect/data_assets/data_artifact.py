@@ -46,6 +46,13 @@ class DataArtifact:
         # The file can be written in batches for better memory management
         with jsonlines.Writer(file) as writer:
             async for b in self._yield_entities_to_persist():
+                table_or_batch: pa.RecordBatch | pa.Table = (
+                    b if isinstance(b, (pa.Table, pa.RecordBatch)) else None
+                )
+
+                if table_or_batch:
+                    b = table_or_batch.to_pylist()
+
                 if not isinstance(b, Iterable):
                     b = [b]
 
@@ -56,26 +63,38 @@ class DataArtifact:
 
         try:
             async for b in self._yield_entities_to_persist():
-                record_batch: pa.RecordBatch = pa.RecordBatch.from_pylist(b)
+                columns = {}
+
+                # If its a tuple, extract the columns from the 2nd arg
+                # and make b equal the actual value
+                if isinstance(b, tuple):
+                    columns = b[1]
+                    b = b[0]
+
+                table_or_batch: pa.RecordBatch | pa.Table = (
+                    b
+                    if isinstance(b, (pa.Table, pa.RecordBatch))
+                    else pa.RecordBatch.from_pylist(b)
+                )
 
                 # Use the first entity to determine the file's schema
                 if not writer:
-                    writer = pq.ParquetWriter(file, record_batch.schema)
+                    writer = pq.ParquetWriter(file, table_or_batch.schema)
                 else:
                     # If schema has evolved, adjust the current RecordBatch
-                    if not record_batch.schema.equals(writer.schema):
+                    if not table_or_batch.schema.equals(writer.schema):
                         unified_schema = pa.unify_schemas(
-                            [writer.schema, record_batch.schema],
+                            [writer.schema, table_or_batch.schema],
                             promote_options="permissive",
                         )
 
                         # Align the RecordBatch with the unified schema
-                        record_batch = record_batch.cast(unified_schema)
+                        table_or_batch = table_or_batch.cast(unified_schema)
 
                         # Manually adjust the schema of the writer if needed
                         writer.schema = unified_schema
 
-                writer.write_batch(record_batch)
+                writer.write(table_or_batch)
         except Exception as e:
             raise
         finally:
@@ -101,8 +120,21 @@ class DataArtifact:
                 batch_data = batch_data.query()
 
             if isinstance(batch_data, (duckdb.DuckDBPyRelation)):
+                columns = {
+                    col: type
+                    for idx, col in enumerate(batch_data.columns)
+                    for type in [batch_data.types[idx]]
+                }
 
                 while True:
+                    batch = batch_data.fetch_arrow_table(1000)
+
+                    if not batch:
+                        break
+
+                    yield batch
+                    return
+
                     # duckdb fetchmany returns a list of tuples
                     # turn it into a list of dicts
                     fetched_batch = batch_data.fetchmany(1000)
@@ -136,7 +168,7 @@ class DataArtifact:
                     if not fetched_batch:
                         break
 
-                    yield fetched_batch
+                    yield fetched_batch, columns
 
             elif isinstance(batch_data, httpx.Response):
                 yield batch_data.json()
