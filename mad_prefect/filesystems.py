@@ -113,9 +113,9 @@ class FsspecFileSystem(
         return destination_path
 
     @prefect.utilities.asyncutils.sync_compatible
-    async def delete_path(self, path: str) -> None:
+    async def delete_path(self, path: str, recursive: bool = False) -> None:
         resolved_path = self._resolve_path(path)
-        self._fs.rm(resolved_path)
+        self._fs.rm(resolved_path, recursive=recursive)
 
     @prefect.utilities.asyncutils.sync_compatible
     async def get_directory(
