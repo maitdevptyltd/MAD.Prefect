@@ -67,7 +67,7 @@ class DataArtifact:
             # If the entity is a DataAsset, turn it into a DuckDbPyRelation, so it can be handled
             if isinstance(batch_data, DataArtifact):
                 # An artifact may not exist for example when there were no results
-                if not batch_data.exists():
+                if not await batch_data.exists():
                     continue
 
                 batch_data = batch_data.query()
@@ -123,6 +123,6 @@ class DataArtifact:
 
         return asset_query
 
-    def exists(self):
+    async def exists(self):
         fs = await get_fs()
         return fs.exists(self.path)
