@@ -104,11 +104,12 @@ class DataAsset:
         return self
 
     async def __call__(self, *args, **kwargs):
-        # TODO: upon the first time a data asset binds its arguments, should it create a new instance of a
-        # data asset? This will prevent 5 different assets which get injected parameters from overriding
-        # different valeus of each other. Not an issue now but be a potential race condition
         if not self.__bound_arguments:
-            self._bind_arguments(*args, **kwargs)
+            # For now, if there are no bound arguments, then we will create a new instance of a DataAsset
+            # which will prevent collision with same referenced assets with different parameters
+            # called directly through DataAsset(args, kwargs)
+            asset_with_arguments = self.with_arguments(*args, **kwargs)
+            return await asset_with_arguments()
 
         assert self.__bound_arguments
         result_artifact = self._create_result_artifact()
