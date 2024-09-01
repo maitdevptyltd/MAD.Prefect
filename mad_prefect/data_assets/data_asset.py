@@ -45,19 +45,15 @@ class DataAsset:
             self.name,
             self.snapshot_artifacts,
         )
-        asset.bound_arguments = asset.fn_signature.bind(*args, **kwargs)
-        asset.bound_arguments.apply_defaults()
 
+        asset._bind_arguments(*args, **kwargs)
         return asset
 
-    async def __call__(self, *args, **kwargs):
-        # Set runtime
-        self.runtime = datetime.now(UTC)
-        self.runtime_str = self.runtime.isoformat().replace(":", "_")
+    def _bind_arguments(self, *args, **kwargs):
+        self.bound_arguments = self.fn_signature.bind(*args, **kwargs)
+        self.bound_arguments.apply_defaults()
 
-        # Wrap args into dictionary
-        self.args = self.bound_arguments or self.fn_signature.bind(*args, **kwargs)
-        self.args.apply_defaults()
+        self.args = self.bound_arguments
         self.args_dict = dict(self.args.arguments)
 
         # Resolve (path, artifacts_dir, name) to insert template values
@@ -75,9 +71,19 @@ class DataAsset:
                 f"Unable to resolve data asset name: {self.name} with {self.args_dict}."
             )
 
-        self.resolved_path = resolved_path
-        self.resolved_name = resolved_name
-        self.resolved_artifacts_dir = resolved_artifacts_dir
+        self.path = resolved_path
+        self.name = resolved_name
+        self.artifacts_dir = resolved_artifacts_dir
+
+        return self
+
+    async def __call__(self, *args, **kwargs):
+        # Set runtime
+        self.runtime = datetime.now(UTC)
+        self.runtime_str = self.runtime.isoformat().replace(":", "_")
+
+        if not self.bound_arguments:
+            self._bind_arguments(*args, **kwargs)
 
         # Generate identifiers
         self.id = self._generate_asset_guid()
@@ -87,9 +93,7 @@ class DataAsset:
             f"Running operations for asset_run_id: {self.run_id}, on asset_id: {self.id}"
         )
 
-        # Set default values for attributes
         self.data_written: bool = False
-        self.artifact_glob = None
 
         # TODO: set up function that examines metadata to extract
         # last_created timestamp
@@ -136,7 +140,7 @@ class DataAsset:
 
         # create the artifact for the data asset by glob querying all the artifacts together
         result_artifact = DataArtifact(
-            self.resolved_path,
+            self.path,
             (
                 duckdb.query(
                     f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
@@ -159,7 +163,7 @@ class DataAsset:
         await register_mad_protocol()
 
         # # If asset has been created query the file
-        if fs.glob(self.resolved_path):
+        if fs.glob(self.path):
             return self._get_self_query(query_str)
 
         # TODO: let's throw an error for now, as self() executed and there should be data
@@ -167,15 +171,13 @@ class DataAsset:
         raise ValueError(f"No data found for asset_id: {self.id}")
 
     def _get_self_query(self, query_str: str | None = None):
-        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.resolved_path}'")
-        duckdb.register(f"{self.resolved_name}_{self.id}", asset_query)
+        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
+        duckdb.register(f"{self.name}_{self.id}", asset_query)
 
         if not query_str:
-            return duckdb.query(f"SELECT * FROM {self.resolved_name}_{self.id}")
+            return duckdb.query(f"SELECT * FROM {self.name}_{self.id}")
 
-        directed_string = query_str.replace(
-            self.resolved_name, f"{self.resolved_name}_{self.id}"
-        )
+        directed_string = query_str.replace(self.name, f"{self.name}_{self.id}")
 
         return duckdb.query(directed_string)
 
@@ -209,18 +211,18 @@ class DataAsset:
 
     def _get_artifact_base_path(self):
         # Extract folder path for folder set up
-        folder_path = os.path.dirname(self.resolved_path)
+        folder_path = os.path.dirname(self.path)
 
         # Set up the base path for artifact storage
-        if not self.resolved_artifacts_dir:
+        if not self.artifacts_dir:
             base_path: str = f"{folder_path}/_artifacts/asset={self.name}"
         else:
-            base_path: str = self.resolved_artifacts_dir
+            base_path: str = self.artifacts_dir
 
         return base_path
 
     def _get_filename(self):
-        return os.path.splitext(os.path.basename(self.resolved_path))[0]
+        return os.path.splitext(os.path.basename(self.path))[0]
 
     def _resolve_attribute(self, input_str: str | None = None):
         if not input_str or not self.args_dict:
@@ -230,11 +232,11 @@ class DataAsset:
         return input_str
 
     def _generate_asset_guid(self):
-        hash_input = f"{self.resolved_name}:{self.resolved_path}:{self.resolved_artifacts_dir}:{str(self.args)}"
+        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self.args)}"
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     def _generate_asset_iteration_guid(self):
-        hash_input = f"{self.resolved_name}:{self.resolved_path}:{self.resolved_artifacts_dir}:{self.runtime_str}:{str(self.args)}"
+        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.runtime_str}:{str(self.args)}"
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     async def __save_run_metadata(self):
@@ -244,19 +246,18 @@ class DataAsset:
 
         fs = await get_fs()
         asset_metadata = {
-            "asset_run_id": self.run_id,
-            "asset_id": self.id,
-            "asset_name": self.resolved_name,
+            "run_id": self.run_id,
+            "id": self.id,
+            "name": self.name,
             "fn_name": self.fn_name,
             "parameters": json.dumps(self.args_dict, default=_handle_unknown_types),
-            "output_path": self.resolved_path,
-            "runtime": self.runtime_str,
+            "path": self.path,
+            "runtime_str": self.runtime_str,
             "data_written": self.data_written,
-            "artifact_glob": self.artifact_glob,
         }
 
         await fs.write_data(
-            f"{ASSET_METADATA_LOCATION}/asset_name={self.resolved_name}/asset_id={self.id}/asset_run_id={self.run_id}/metadata.json",
+            f"{ASSET_METADATA_LOCATION}/asset_name={self.name}/asset_id={self.id}/asset_run_id={self.run_id}/metadata.json",
             asset_metadata,
         )
 
