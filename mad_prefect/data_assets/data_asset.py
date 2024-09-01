@@ -2,7 +2,7 @@ from datetime import datetime, UTC
 import hashlib
 import inspect
 import json
-from typing import Callable
+from typing import Callable, Literal
 import duckdb
 import httpx
 from mad_prefect.data_assets.data_artifact import DataArtifact
@@ -25,6 +25,7 @@ class DataAsset:
     artifacts_dir: str
     name: str
     snapshot_artifacts: bool
+    artifact_filetype: Literal["parquet", "json"]
     asset_run: DataAssetRun
 
     def __init__(
@@ -34,6 +35,7 @@ class DataAsset:
         artifacts_dir: str = "",
         name: str | None = None,
         snapshot_artifacts: bool = False,
+        artifact_filetype: Literal["parquet", "json"] = "parquet",
     ):
         self.__fn = fn
         self.__fn_signature = inspect.signature(fn)
@@ -43,6 +45,7 @@ class DataAsset:
         self.path = path
         self.artifacts_dir = artifacts_dir
         self.snapshot_artifacts = snapshot_artifacts
+        self.artifact_filetype = artifact_filetype
 
         self.id = self._generate_asset_guid()
 
@@ -58,6 +61,7 @@ class DataAsset:
             self.artifacts_dir,
             self.name,
             self.snapshot_artifacts,
+            self.artifact_filetype,
         )
 
         asset._bind_arguments(*args, **kwargs)
@@ -163,13 +167,20 @@ class DataAsset:
         globs = [f"mad://{a.path.strip('/')}" for a in artifacts]
 
         # create the artifact for the data asset by glob querying all the artifacts together
-        result_artifact.data = (
-            duckdb.query(
-                f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
+        result_artifact_data = None
+
+        if globs:
+            result_artifact_data = (
+                duckdb.query(
+                    f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
+                )
+                if self.artifact_filetype == "json"
+                else duckdb.query(
+                    f"SELECT * FROM read_parquet({globs}, hive_partitioning = true, union_by_name = true)"
+                )
             )
-            if globs
-            else None
-        )
+
+        result_artifact.data = result_artifact_data
 
         await result_artifact.persist()
         self.asset_run.materialized = datetime.now(UTC)
@@ -226,16 +237,18 @@ class DataAsset:
                 else ""
             )
 
+        filetype = self.artifact_filetype
+
         if params is None and fragment_number is None:
             filename = self._get_filename()
-            return f"{base_path}/{prefix}{filename}.json"
+            return f"{base_path}/{prefix}{filename}.{filetype}"
 
         if params is None:
-            return f"{base_path}/{prefix}fragment={fragment_number}.json"
+            return f"{base_path}/{prefix}fragment={fragment_number}.{filetype}"
 
         params_path = "/".join(f"{key}={value}" for key, value in params.items())
 
-        return f"{base_path}/{prefix}{params_path}.json"
+        return f"{base_path}/{prefix}{params_path}.{filetype}"
 
     def _get_artifact_base_path(self):
         # Extract folder path for folder set up
