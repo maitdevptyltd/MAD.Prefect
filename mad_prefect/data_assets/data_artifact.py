@@ -42,6 +42,8 @@ class DataArtifact:
             else:
                 raise ValueError("Unsupported file format")
 
+        return await self.exists()
+
     async def _persist_json(self, file: BinaryIO):
         # The file can be written in batches for better memory management
         with jsonlines.Writer(file) as writer:
@@ -94,11 +96,13 @@ class DataArtifact:
             else:
                 return data
 
+        entities = self._yield_entities_to_persist()
+        next_entity = await anext(entities, None)
         writer: pq.ParquetWriter | None = None
 
         try:
-            async for b in self._yield_entities_to_persist():
-                b = __sanitize_data(b)
+            while next_entity:
+                b = __sanitize_data(next_entity)
                 table_or_batch: pa.RecordBatch | pa.Table = (
                     b
                     if isinstance(b, (pa.Table, pa.RecordBatch))
@@ -123,6 +127,7 @@ class DataArtifact:
                         writer.schema = unified_schema
 
                 writer.write(table_or_batch)
+                next_entity = await anext(entities, None)
         except Exception as e:
             raise
         finally:

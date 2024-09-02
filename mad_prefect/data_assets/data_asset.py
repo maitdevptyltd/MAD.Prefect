@@ -159,9 +159,10 @@ class DataAsset:
 
             path = self._build_artifact_path(base_artifact_path, params, fragment_num)
             fragment_artifact = DataArtifact(path, fragment)
-            await fragment_artifact.persist()
 
-            artifacts.append(fragment_artifact)
+            if await fragment_artifact.persist():
+                artifacts.append(fragment_artifact)
+
             fragment_num += 1
 
         globs = [f"mad://{a.path.strip('/')}" for a in artifacts]
@@ -204,10 +205,6 @@ class DataAsset:
         # # If asset has been created query the file
         if fs.glob(self.path):
             return self._get_self_query(query_str)
-
-        # TODO: let's throw an error for now, as self() executed and there should be data
-        # at the very least we should have an empty file?
-        raise ValueError(f"No data found for asset_id: {self.id}")
 
     def _get_self_query(self, query_str: str | None = None):
         asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")

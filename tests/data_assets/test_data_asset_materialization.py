@@ -154,3 +154,23 @@ async def test_when_data_asset_contains_empty_struct():
 
     # The total count should be 4 since there are 4 rows in the output parquet
     assert count_query_result[0] == 4
+
+
+async def test_when_data_asset_yields_no_data():
+    @asset("empty_asset.parquet")
+    async def empty_asset():
+        yield []
+
+    empty_asset_query = await empty_asset.query("SELECT * FROM empty_asset")
+
+    if not empty_asset_query:
+        return
+
+    count_query_result = duckdb.query(
+        "SELECT COUNT(*) c FROM empty_asset_query"
+    ).fetchone()
+
+    assert count_query_result
+
+    # The total count should be 0 since the asset yields no data
+    assert count_query_result[0] == 0
