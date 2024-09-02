@@ -79,10 +79,26 @@ class DataArtifact:
                 writer.write_all(b)
 
     async def _persist_parquet(self, file: BinaryIO):
+        def __sanitize_data(data):
+            """
+            Recursively go through the data and replace any empty dictionaries
+            with None or a dummy value to avoid Parquet serialization errors.
+            """
+            if isinstance(data, dict):
+                if not data:  # it's an empty dict
+                    return None  # or return {'dummy_field': None} to keep the key with a dummy field
+                else:
+                    return {key: __sanitize_data(value) for key, value in data.items()}
+            elif isinstance(data, list):
+                return [__sanitize_data(item) for item in data]
+            else:
+                return data
+
         writer: pq.ParquetWriter | None = None
 
         try:
             async for b in self._yield_entities_to_persist():
+                b = __sanitize_data(b)
                 table_or_batch: pa.RecordBatch | pa.Table = (
                     b
                     if isinstance(b, (pa.Table, pa.RecordBatch))

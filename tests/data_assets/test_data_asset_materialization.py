@@ -111,3 +111,46 @@ async def test_when_data_asset_schema_evolution():
 
     # The total count should be 5 since there are 5 rows in the output parquet
     assert count_query_result[0] == 5
+
+
+async def test_when_data_asset_contains_empty_struct():
+    @asset("empty_struct_asset.parquet")
+    async def empty_struct_asset():
+        yield [
+            {
+                "count": 1,
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+                "empty": {},
+                "empty2": {"empty3": {}},
+            },
+            {
+                "count": 5,
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+                "empty": {},
+                "empty2": {"empty3": {}},
+            },
+            {
+                "count": 10,
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+                "empty": {},
+                "empty2": {"empty3": {}},
+            },
+            {
+                "count": 15,
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+                "empty": {},
+                "empty2": {"empty3": {}},
+            },
+        ]
+
+    empty_struct_asset_query = await empty_struct_asset.query(
+        "SELECT * FROM empty_struct_asset"
+    )
+    count_query_result = duckdb.query(
+        "SELECT COUNT(*) c FROM empty_struct_asset_query"
+    ).fetchone()
+
+    assert count_query_result
+
+    # The total count should be 4 since there are 4 rows in the output parquet
+    assert count_query_result[0] == 4
