@@ -25,28 +25,27 @@ class DataArtifact:
         if not self.data:
             return
 
-        fs = await get_fs()
         await register_mad_protocol()
         duckdb.query("SET temp_directory = './.tmp/duckdb/'")
 
         (_, path_extension) = os.path.splitext(self.path)
 
-        # Open the path, this is where we want to write the data
-        with await fs.open(self.path, "wb", True) as f:
-            f = cast(BinaryIO, f)
-
-            if path_extension == ".json":
-                await self._persist_json(f)
-            elif path_extension == ".parquet":
-                await self._persist_parquet(f)
-            else:
-                raise ValueError("Unsupported file format")
+        if path_extension == ".json":
+            await self._persist_json()
+        elif path_extension == ".parquet":
+            await self._persist_parquet()
+        else:
+            raise ValueError("Unsupported file format")
 
         return await self.exists()
 
-    async def _persist_json(self, file: BinaryIO):
-        # The file can be written in batches for better memory management
-        with jsonlines.Writer(file) as writer:
+    async def _open(self):
+        fs = await get_fs()
+        return cast(BinaryIO, await fs.open(self.path, "wb", True))
+
+    async def _persist_json(self):
+        with await self._open() as file, jsonlines.Writer(file) as writer:
+            # The file can be written in batches for better memory management
             async for b in self._yield_entities_to_persist():
                 table_or_batch: pa.RecordBatch | pa.Table = (
                     b if isinstance(b, (pa.Table, pa.RecordBatch)) else None
@@ -80,7 +79,7 @@ class DataArtifact:
 
                 writer.write_all(b)
 
-    async def _persist_parquet(self, file: BinaryIO):
+    async def _persist_parquet(self):
         def __sanitize_data(data):
             """
             Recursively go through the data and replace any empty dictionaries
@@ -97,10 +96,12 @@ class DataArtifact:
                 return data
 
         entities = self._yield_entities_to_persist()
-        next_entity = await anext(entities, None)
+        file: BinaryIO | None = None
         writer: pq.ParquetWriter | None = None
 
         try:
+            next_entity = await anext(entities)
+
             while next_entity:
                 b = __sanitize_data(next_entity)
                 table_or_batch: pa.RecordBatch | pa.Table = (
@@ -110,7 +111,8 @@ class DataArtifact:
                 )
 
                 # Use the first entity to determine the file's schema
-                if not writer:
+                if not file or not writer:
+                    file = await self._open()
                     writer = pq.ParquetWriter(file, table_or_batch.schema)
                 else:
                     # If schema has evolved, adjust the current RecordBatch
@@ -127,12 +129,17 @@ class DataArtifact:
                         writer.schema = unified_schema
 
                 writer.write(table_or_batch)
-                next_entity = await anext(entities, None)
+                next_entity = await anext(entities)
+        except StopAsyncIteration as e:
+            pass
         except Exception as e:
             raise
         finally:
             if writer:
                 writer.close()
+
+            if file:
+                file.close()
 
     async def _yield_entities_to_persist(self):
         from mad_prefect.data_assets.data_asset import DataAsset
@@ -150,7 +157,7 @@ class DataArtifact:
                 if not await batch_data.exists():
                     continue
 
-                batch_data = batch_data.query()
+                batch_data = await batch_data.query()
 
             if isinstance(batch_data, (duckdb.DuckDBPyRelation)):
                 # Convert duckdb into batches of arrow tables
@@ -169,7 +176,10 @@ class DataArtifact:
             else:
                 yield batch_data
 
-    def query(self, query_str: str | None = None):
+    async def query(self, query_str: str | None = None):
+        await register_mad_protocol()
+        duckdb.query("SET temp_directory = './.tmp/duckdb/'")
+
         asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
 
         if query_str:
