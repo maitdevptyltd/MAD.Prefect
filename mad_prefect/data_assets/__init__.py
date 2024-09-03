@@ -9,7 +9,7 @@ def asset(
     artifacts_dir: str = "",
     name: str | None = None,
     snapshot_artifacts: bool = False,
-    artifact_filetype: Literal["parquet", "json"] = "parquet",
+    artifact_filetype: Literal["parquet", "json"] = "json",
 ):
     # Prevent a circular reference as it references the env variable
     from mad_prefect.data_assets.data_asset import DataAsset

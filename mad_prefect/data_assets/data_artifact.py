@@ -144,8 +144,6 @@ class DataArtifact:
     async def _yield_entities_to_persist(self):
         from mad_prefect.data_assets.data_asset import DataAsset
 
-        (_, path_extension) = os.path.splitext(self.path)
-
         async for batch_data in yield_data_batches(self.data):
             # If the data is an asset, execute it to get the result artifact
             if isinstance(batch_data, DataAsset):

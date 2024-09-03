@@ -35,7 +35,7 @@ class DataAsset:
         artifacts_dir: str = "",
         name: str | None = None,
         snapshot_artifacts: bool = False,
-        artifact_filetype: Literal["parquet", "json"] = "parquet",
+        artifact_filetype: Literal["parquet", "json"] = "json",
     ):
         self.__fn = fn
         self.__fn_signature = inspect.signature(fn)
