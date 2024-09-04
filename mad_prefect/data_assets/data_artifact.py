@@ -1,6 +1,6 @@
 import datetime
 import os
-from typing import BinaryIO, Iterable, cast
+from typing import BinaryIO, Sequence, cast, List, Dict
 import uuid
 import duckdb
 import httpx
@@ -74,7 +74,7 @@ class DataArtifact:
 
                     b = sanitze_data(b)
 
-                if not isinstance(b, Iterable):
+                if not isinstance(b, Sequence):
                     b = [b]
 
                 writer.write_all(b)
