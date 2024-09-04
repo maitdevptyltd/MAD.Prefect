@@ -2,6 +2,7 @@ import os
 from typing import Callable, Literal
 
 ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", ".asset_metadata")
+ARTIFACT_FILE_TYPES = Literal["parquet", "json"]
 
 
 def asset(
@@ -9,7 +10,7 @@ def asset(
     artifacts_dir: str = "",
     name: str | None = None,
     snapshot_artifacts: bool = False,
-    artifact_filetype: Literal["parquet", "json"] = "json",
+    artifact_filetype: ARTIFACT_FILE_TYPES = "json",
 ):
     # Prevent a circular reference as it references the env variable
     from mad_prefect.data_assets.data_asset import DataAsset

@@ -4,12 +4,10 @@ import inspect
 import json
 from typing import Callable, Literal
 import duckdb
-import httpx
+from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.data_artifact import DataArtifact
+from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
-from mad_prefect.data_assets.utils import (
-    yield_data_batches,
-)
 from mad_prefect.filesystems import get_fs
 from mad_prefect.duckdb import register_mad_protocol
 import os
@@ -25,7 +23,7 @@ class DataAsset:
     artifacts_dir: str
     name: str
     snapshot_artifacts: bool
-    artifact_filetype: Literal["parquet", "json"]
+    artifact_filetype: ARTIFACT_FILE_TYPES
     asset_run: DataAssetRun
 
     def __init__(
@@ -143,46 +141,17 @@ class DataAsset:
             fs = await get_fs()
             await fs.delete_path(base_artifact_path, recursive=True)
 
-        fragment_num = 0
-        artifacts: list[DataArtifact] = []
+        collector = DataArtifactCollector(
+            self.__fn(*self.__bound_arguments.args, **self.__bound_arguments.kwargs),
+            base_artifact_path,
+            self.artifact_filetype,
+        )
+        result_artifact.data = await collector.collect()
 
-        async for fragment in yield_data_batches(
-            self.__fn(*self.__bound_arguments.args, **self.__bound_arguments.kwargs)
-        ):
-            # If the output isn't a DataAssetArtifact manually set the params & base_path
-            # and initialize the output as a DataAssetArtifact
-            params = (
-                dict(fragment.request.url.params)
-                if isinstance(fragment, httpx.Response) and fragment.request.url.params
-                else None
-            )
-
-            path = self._build_artifact_path(base_artifact_path, params, fragment_num)
-            fragment_artifact = DataArtifact(path, fragment)
-
-            if await fragment_artifact.persist():
-                artifacts.append(fragment_artifact)
-                fragment_num += 1
-
-        globs = [f"mad://{a.path.strip('/')}" for a in artifacts]
-
-        # create the artifact for the data asset by glob querying all the artifacts together
-        result_artifact_data = None
-
-        if globs:
-            result_artifact_data = (
-                duckdb.query(
-                    f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
-                )
-                if self.artifact_filetype == "json"
-                else duckdb.query(
-                    f"SELECT * FROM read_parquet({globs}, hive_partitioning = true, union_by_name = true)"
-                )
-            )
-
-        result_artifact.data = result_artifact_data
-
+        # Persist the result artifact to storage, fully materialize it
         await result_artifact.persist()
+
+        # Record information about the run
         self.asset_run.materialized = datetime.now(UTC)
         self.asset_run.duration_miliseconds = int(
             (self.asset_run.materialized - self.asset_run.runtime).microseconds / 1000
@@ -216,50 +185,28 @@ class DataAsset:
 
         return duckdb.query(directed_string)
 
-    def _build_artifact_path(
-        self,
-        base_path: str,
-        params: dict | None = None,
-        fragment_number: int | None = None,
-    ):
-        prefix = ""
+    def _get_artifact_base_path(self):
+        partition = ""
 
         # If we snapshot artifacts, encapsulate the file in a directory with the runtime= parameter
         # so you can view changes over time
         if self.snapshot_artifacts and self.asset_run.runtime:
-            prefix = (
+            partition = (
                 f"year={self.asset_run.runtime.year}/month={self.asset_run.runtime.month}/day={self.asset_run.runtime.day}/runtime={self.asset_run.runtime.isoformat()}/"
                 if self.snapshot_artifacts
                 else ""
             )
 
-        filetype = self.artifact_filetype
-
-        if params is None and fragment_number is None:
-            filename = self._get_filename()
-            return f"{base_path}/{prefix}{filename}.{filetype}"
-
-        if params is None:
-            return f"{base_path}/{prefix}fragment={fragment_number}.{filetype}"
-
-        params_path = "/".join(f"{key}={value}" for key, value in params.items())
-
-        return f"{base_path}/{prefix}{params_path}.{filetype}"
-
-    def _get_artifact_base_path(self):
         # Extract folder path for folder set up
         folder_path = os.path.dirname(self.path)
 
         # Set up the base path for artifact storage
         if not self.artifacts_dir:
-            base_path: str = f"{folder_path}/_artifacts/asset={self.name}"
+            base_path: str = f"{folder_path}/_artifacts/asset={self.name}/{partition}"
         else:
-            base_path: str = self.artifacts_dir
+            base_path: str = f"{self.artifacts_dir}/{partition}"
 
         return base_path
-
-    def _get_filename(self):
-        return os.path.splitext(os.path.basename(self.path))[0]
 
     def _resolve_attribute(self, input_str: str | None = None):
         if not input_str or not self.__bound_arguments:
