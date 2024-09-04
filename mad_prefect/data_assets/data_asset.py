@@ -162,8 +162,7 @@ class DataAsset:
 
             if await fragment_artifact.persist():
                 artifacts.append(fragment_artifact)
-
-            fragment_num += 1
+                fragment_num += 1
 
         globs = [f"mad://{a.path.strip('/')}" for a in artifacts]
 
