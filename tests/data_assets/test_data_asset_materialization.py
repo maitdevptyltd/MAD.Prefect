@@ -214,4 +214,5 @@ async def test_nested_structs_with_many_keys_should_not_cast_to_string():
     assert composed_query.description[1][0] == "data"
 
     # And it not a string type
+    # duckdb GitHub Issue: https://github.com/duckdb/duckdb/issues/13734
     assert composed_query.description[1][1] != "STRING"
