@@ -1,3 +1,5 @@
+import random
+import string
 import duckdb
 from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_asset import DataAsset
@@ -174,3 +176,42 @@ async def test_when_data_asset_yields_no_data():
 
     # The total count should be 0 since the asset yields no data
     assert count_query_result[0] == 0
+
+
+async def test_nested_structs_with_many_keys_should_not_cast_to_string():
+    def generate_unique_dict(keys):
+        return {f"{key}@somewhere.com": ["creator", "editor"] for key in keys}
+
+    def generate_random_keys(count):
+        return [
+            "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+            for _ in range(count)
+        ]
+
+    def generate_rows(num_rows):
+        rows = []
+        for i in range(num_rows):
+            keys = generate_random_keys(100)
+            rows.append(
+                {
+                    "id": str(i + 1),
+                    "data": generate_unique_dict(keys),
+                }
+            )
+        return rows
+
+    @asset("dict_array_asset_1.parquet")
+    async def dict_array_asset_1():
+        yield generate_rows(50)
+        yield generate_rows(50)
+
+    # Query the composed asset to check its contents
+    composed_query = await dict_array_asset_1.query("SELECT * FROM dict_array_asset_1")
+
+    assert composed_query
+
+    # The second column is named data
+    assert composed_query.description[1][0] == "data"
+
+    # And it not a string type
+    assert composed_query.description[1][1] != "STRING"
