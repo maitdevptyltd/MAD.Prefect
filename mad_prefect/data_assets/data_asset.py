@@ -123,7 +123,7 @@ class DataAsset:
         self.asset_run.runtime = datetime.now(UTC)
 
         print(
-            f"Running operations for asset_run_id: {self.asset_run.id}, on asset_id: {self.id}"
+            f"Running operations for asset_run_id: {self.asset_run.id}, on asset_id: {self.id}, on asset: {self.name}"
         )
 
         # Write metadata before processing result for troubleshooting purposes
