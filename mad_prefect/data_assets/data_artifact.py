@@ -1,6 +1,6 @@
 import datetime
 import os
-from typing import BinaryIO, Sequence, cast, List, Dict
+from typing import BinaryIO, Sequence, cast
 import uuid
 import duckdb
 import httpx
