@@ -23,9 +23,9 @@ class DataAsset:
         artifact_filetype: ARTIFACT_FILE_TYPES = "json",
         artifact_columns: dict[str, str] | None = None,
     ):
-        self.__fn: Callable = fn
-        self.__fn_signature: inspect.Signature = inspect.signature(fn)
-        self.__bound_arguments: inspect.BoundArguments | None = None
+        self._fn: Callable = fn
+        self._fn_signature: inspect.Signature = inspect.signature(fn)
+        self._bound_arguments: inspect.BoundArguments | None = None
 
         self.name: str = name if name else fn.__name__
         self.path: str = path
@@ -44,7 +44,7 @@ class DataAsset:
 
     def with_arguments(self, *args, **kwargs):
         asset = DataAsset(
-            self.__fn,
+            self._fn,
             self.path,
             self.artifacts_dir,
             self.name,
@@ -67,7 +67,7 @@ class DataAsset:
     ):
         # Default to the current asset's options for any None values
         asset = DataAsset(
-            self.__fn,
+            self._fn,
             path=path or self.path,
             artifacts_dir=artifacts_dir or self.artifacts_dir,
             name=name or self.name,
@@ -77,18 +77,18 @@ class DataAsset:
         )
 
         # Ensure we're also passing through any bound arguments if we have them
-        if self.__bound_arguments:
+        if self._bound_arguments:
             asset._bind_arguments(
-                *self.__bound_arguments.args, **self.__bound_arguments.kwargs
+                *self._bound_arguments.args, **self._bound_arguments.kwargs
             )
 
         return asset
 
     def _bind_arguments(self, *args, **kwargs):
-        self.__bound_arguments = self.__fn_signature.bind(*args, **kwargs)
-        self.__bound_arguments.apply_defaults()
+        self._bound_arguments = self._fn_signature.bind(*args, **kwargs)
+        self._bound_arguments.apply_defaults()
 
-        args = self.__bound_arguments
+        args = self._bound_arguments
         args_dict = dict(args.arguments)
 
         # Resolve (path, artifacts_dir, name) to insert template values
@@ -112,7 +112,7 @@ class DataAsset:
 
         def _handle_unknown_types(data):
             if isinstance(data, DataAsset):
-                return {"name": self.name, "fn": self.__fn}
+                return {"name": self.name, "fn": self._fn}
 
         # Recalculate the ids incase the parameters have changed
         self.id = self.asset_run.asset_id = self._generate_asset_guid()
@@ -124,14 +124,14 @@ class DataAsset:
         return self
 
     async def __call__(self, *args, **kwargs):
-        if not self.__bound_arguments:
+        if not self._bound_arguments:
             # For now, if there are no bound arguments, then we will create a new instance of a DataAsset
             # which will prevent collision with same referenced assets with different parameters
             # called directly through DataAsset(args, kwargs)
             asset_with_arguments = self.with_arguments(*args, **kwargs)
             return await asset_with_arguments()
 
-        assert self.__bound_arguments
+        assert self._bound_arguments
         result_artifact = self._create_result_artifact()
 
         if self.asset_run and (materialized := self.asset_run.materialized):
@@ -161,7 +161,7 @@ class DataAsset:
             await fs.delete_path(base_artifact_path, recursive=True)
 
         collector = DataArtifactCollector(
-            self.__fn(*self.__bound_arguments.args, **self.__bound_arguments.kwargs),
+            self._fn(*self._bound_arguments.args, **self._bound_arguments.kwargs),
             base_artifact_path,
             self.artifact_filetype,
             columns=self.artifact_columns,
@@ -213,16 +213,16 @@ class DataAsset:
         return base_path
 
     def _resolve_attribute(self, input_str: str | None = None):
-        if not input_str or not self.__bound_arguments:
+        if not input_str or not self._bound_arguments:
             return input_str
 
-        input_str = input_str.format(**self.__bound_arguments.arguments)
+        input_str = input_str.format(**self._bound_arguments.arguments)
         return input_str
 
     def _generate_asset_guid(self):
-        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self.__bound_arguments.arguments) if self.__bound_arguments else ''}"
+        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self._bound_arguments.arguments) if self._bound_arguments else ''}"
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     def _generate_asset_iteration_guid(self):
-        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.asset_run.runtime.isoformat() if self.asset_run.runtime else ''}:{str(self.__bound_arguments.arguments) if self.__bound_arguments else ''}"
+        hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.asset_run.runtime.isoformat() if self.asset_run.runtime else ''}:{str(self._bound_arguments.arguments) if self._bound_arguments else ''}"
         return hashlib.md5(hash_input.encode()).hexdigest()
