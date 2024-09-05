@@ -13,19 +13,6 @@ import os
 
 
 class DataAsset:
-    __fn: Callable
-    __fn_signature: inspect.Signature
-    __bound_arguments: inspect.BoundArguments | None
-
-    id: str
-    path: str
-    artifacts_dir: str
-    name: str
-    snapshot_artifacts: bool
-    artifact_filetype: ARTIFACT_FILE_TYPES
-    artifact_columns: dict[str, str]
-    asset_run: DataAssetRun
-
     def __init__(
         self,
         fn: Callable,
@@ -36,17 +23,17 @@ class DataAsset:
         artifact_filetype: ARTIFACT_FILE_TYPES = "json",
         artifact_columns: dict[str, str] | None = None,
     ):
-        self.__fn = fn
-        self.__fn_signature = inspect.signature(fn)
-        self.__bound_arguments = None
+        self.__fn: Callable = fn
+        self.__fn_signature: inspect.Signature = inspect.signature(fn)
+        self.__bound_arguments: inspect.BoundArguments | None = None
 
-        self.name = name if name else fn.__name__
-        self.path = path
-        self.artifacts_dir = artifacts_dir
-        self.snapshot_artifacts = snapshot_artifacts
+        self.name: str = name if name else fn.__name__
+        self.path: str = path
+        self.artifacts_dir: str = artifacts_dir
+        self.snapshot_artifacts: bool = snapshot_artifacts
 
-        self.artifact_filetype = artifact_filetype
-        self.artifact_columns = artifact_columns or {}
+        self.artifact_filetype: ARTIFACT_FILE_TYPES = artifact_filetype
+        self.artifact_columns: dict[str, str] = artifact_columns or {}
 
         self.id = self._generate_asset_guid()
 
@@ -199,9 +186,8 @@ class DataAsset:
     async def query(self, query_str: str | None = None):
         result_artifact = await self()
 
-        if await result_artifact.exists():
-            artifact_query = DataArtifactQuery([result_artifact])
-            return await artifact_query.query(query_str)
+        artifact_query = DataArtifactQuery([result_artifact])
+        return await artifact_query.query(query_str)
 
     def _get_artifact_base_path(self):
         partition = ""
