@@ -49,8 +49,14 @@ class DataArtifactQuery:
 
         if filetype == "json":
             artifact_base_query = f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
+        elif filetype == "parquet":
+            # Parquet's columns cannot be provided while reading like json,
+            # as parquet stores column data type metadata already
+            return duckdb.query(
+                f"SELECT * FROM read_parquet({globs}, hive_partitioning = true, union_by_name = true)"
+            )
         else:
-            artifact_base_query = f"SELECT * FROM read_parquet({globs}, hive_partitioning = true, union_by_name = true)"
+            raise ValueError(f"Unsupported file format {self.filetype}")
 
         # If the artifact has been provided columns, we override the default
         # auto-detected duckdb columns with any provided
@@ -86,14 +92,9 @@ class DataArtifactQuery:
         # If we had a new map, let's insert that into our query
         if duckdb_columns_map:
             if filetype == "json":
-                artifact_base_query = f"SELECT * FROM read_json({globs}, format='auto', columns={duckdb_columns_map})"
-            elif filetype == "parquet":
-                artifact_base_query = (
-                    f"SELECT * FROM read_parquet({globs}, columns={duckdb_columns_map})"
-                )
+                artifact_base_query = f"SELECT * FROM read_json({globs}, format='auto', columns={duckdb_columns_map}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
             else:
                 raise ValueError(f"Unsupported file format {self.filetype}")
 
         artifact_query = duckdb.query(artifact_base_query)
-
         return artifact_query
