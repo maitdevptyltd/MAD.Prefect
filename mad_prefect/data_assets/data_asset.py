@@ -2,7 +2,7 @@ from datetime import datetime, UTC
 import hashlib
 import inspect
 import json
-from typing import Callable, Literal
+from typing import Callable
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
@@ -33,7 +33,7 @@ class DataAsset:
         artifacts_dir: str = "",
         name: str | None = None,
         snapshot_artifacts: bool = False,
-        artifact_filetype: Literal["parquet", "json"] = "json",
+        artifact_filetype: ARTIFACT_FILE_TYPES = "json",
         artifact_columns: dict[str, str] | None = None,
     ):
         self.__fn = fn
@@ -67,6 +67,34 @@ class DataAsset:
         )
 
         asset._bind_arguments(*args, **kwargs)
+        return asset
+
+    def with_options(
+        self,
+        path: str | None = None,
+        artifacts_dir: str | None = None,
+        name: str | None = None,
+        snapshot_artifacts: bool | None = None,
+        artifact_filetype: ARTIFACT_FILE_TYPES | None = None,
+        artifact_columns: dict[str, str] | None = None,
+    ):
+        # Default to the current asset's options for any None values
+        asset = DataAsset(
+            self.__fn,
+            path=path or self.path,
+            artifacts_dir=artifacts_dir or self.artifacts_dir,
+            name=name or self.name,
+            snapshot_artifacts=snapshot_artifacts or self.snapshot_artifacts,
+            artifact_filetype=artifact_filetype or self.artifact_filetype,
+            artifact_columns=artifact_columns or self.artifact_columns,
+        )
+
+        # Ensure we're also passing through any bound arguments if we have them
+        if self.__bound_arguments:
+            asset._bind_arguments(
+                *self.__bound_arguments.args, **self.__bound_arguments.kwargs
+            )
+
         return asset
 
     def _bind_arguments(self, *args, **kwargs):
