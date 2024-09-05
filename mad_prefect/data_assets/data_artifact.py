@@ -51,40 +51,60 @@ class DataArtifact:
         return cast(BinaryIO, await fs.open(self.path, "wb", True))
 
     async def _persist_json(self):
-        with await self._open() as file, jsonlines.Writer(file) as writer:
-            # The file can be written in batches for better memory management
-            async for b in self._yield_entities_to_persist():
+        # json doesn't support datetime or UUID out the box, so sanitize it from pyarrow
+        def __sanitize_data(data):
+            if isinstance(data, dict):
+                return {k: (__sanitize_data(v)) for k, v in data.items()}
+            elif isinstance(data, list):
+                return [__sanitize_data(item) for item in data]
+            elif isinstance(data, uuid.UUID):
+                return str(data)
+
+            # Parquet can handle dates, json doesn't by default
+            # TODO: how do we register the date data type with jsonl?
+            elif isinstance(data, datetime.datetime) or isinstance(data, datetime.date):
+                return data.isoformat()
+            else:
+                return data
+
+        entities = self._yield_entities_to_persist()
+        file: BinaryIO | None = None
+        writer: jsonlines.Writer | None = None
+
+        try:
+            next_entity = await anext(entities)
+
+            while next_entity:
+                # Use the first entity to determine the file's schema
+                if not file or not writer:
+                    file = await self._open()
+                    writer = jsonlines.Writer(file)
+
                 table_or_batch: pa.RecordBatch | pa.Table = (
-                    b if isinstance(b, (pa.Table, pa.RecordBatch)) else None
+                    next_entity
+                    if isinstance(next_entity, (pa.Table, pa.RecordBatch))
+                    else None
                 )
 
                 if table_or_batch:
-                    b = table_or_batch.to_pylist()
+                    next_entity = table_or_batch.to_pylist()
+                    next_entity = __sanitize_data(next_entity)
 
-                    # json doesn't support datetime or UUID out the box, so sanitize it from pyarrow
-                    def sanitze_data(data):
-                        if isinstance(data, dict):
-                            return {k: (sanitze_data(v)) for k, v in data.items()}
-                        elif isinstance(data, list):
-                            return [sanitze_data(item) for item in data]
-                        elif isinstance(data, uuid.UUID):
-                            return str(data)
+                if not isinstance(next_entity, Sequence):
+                    next_entity = [next_entity]
 
-                        # Parquet can handle dates, json doesn't by default
-                        # TODO: how do we register the date data type with jsonl?
-                        elif isinstance(data, datetime.datetime) or isinstance(
-                            data, datetime.date
-                        ):
-                            return data.isoformat()
-                        else:
-                            return data
+                writer.write_all(next_entity)
+                next_entity = await anext(entities)
+        except StopAsyncIteration as e:
+            pass
+        except Exception as e:
+            raise
+        finally:
+            if writer:
+                writer.close()
 
-                    b = sanitze_data(b)
-
-                if not isinstance(b, Sequence):
-                    b = [b]
-
-                writer.write_all(b)
+            if file:
+                file.close()
 
     async def _persist_parquet(self):
         def __sanitize_data(data):
