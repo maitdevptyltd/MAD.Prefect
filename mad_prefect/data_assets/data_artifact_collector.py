@@ -31,16 +31,20 @@ class DataArtifactCollector:
         fragment_num = 0
 
         async for fragment in yield_data_batches(self.collector):
-            # If the output isn't a DataAssetArtifact manually set the params & base_path
-            # and initialize the output as a DataAssetArtifact
-            params = (
-                dict(fragment.request.url.params)
-                if isinstance(fragment, httpx.Response) and fragment.request.url.params
-                else None
-            )
+            # If the output isn't a DataArtifact manually set the params & base_path
+            # and initialize the output as a DataArtifact
+            if isinstance(fragment, DataArtifact):
+                fragment_artifact = fragment
+            else:
+                params = (
+                    dict(fragment.request.url.params)
+                    if isinstance(fragment, httpx.Response)
+                    and fragment.request.url.params
+                    else None
+                )
 
-            path = self._build_artifact_path(self.dir, params, fragment_num)
-            fragment_artifact = DataArtifact(path, fragment, self.columns)
+                path = self._build_artifact_path(self.dir, params, fragment_num)
+                fragment_artifact = DataArtifact(path, fragment, self.columns)
 
             if await fragment_artifact.persist():
                 self.artifacts.append(fragment_artifact)
