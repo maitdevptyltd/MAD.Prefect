@@ -23,16 +23,13 @@ async def test_when_data_asset_yields_another_data_asset():
     @asset("composed_asset.parquet")
     async def composed_asset():
         yield simple_asset()
-        more_numbers = await simple_asset.query(
-            "SELECT count + 5 as count FROM simple_asset"
-        )
+        more_numbers = await simple_asset.query("SELECT count + 5 as count")
         yield more_numbers
 
-    composed_asset_query = await composed_asset.query("SELECT * FROM composed_asset")
-    count_query_result = duckdb.query(
-        "SELECT COUNT(*) c FROM composed_asset_query"
-    ).fetchone()
+    composed_asset_query = await composed_asset.query("SELECT COUNT(*) c")
+    assert composed_asset_query
 
+    count_query_result = composed_asset_query.fetchone()
     assert count_query_result
 
     # Because composed adds 5 as a new array, there should be 6 in the array total
@@ -59,13 +56,9 @@ async def test_when_data_asset_yields_multiple_lists():
             {"count": 15, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
         ]
 
-    multiple_lists_asset_query = await multiple_lists_asset.query(
-        "SELECT * FROM multiple_lists_asset"
-    )
-    count_query_result = duckdb.query(
-        "SELECT COUNT(*) c FROM multiple_lists_asset_query"
-    ).fetchone()
-
+    multiple_lists_asset_query = await multiple_lists_asset.query("SELECT COUNT(*) c")
+    assert multiple_lists_asset_query
+    count_query_result = multiple_lists_asset_query.fetchone()
     assert count_query_result
 
     # The total count should be 4 since there are 4 rows in the output parquet
@@ -103,11 +96,10 @@ async def test_when_data_asset_schema_evolution():
         yield await schema_evolution_asset_2()
 
     schema_evolution_asset_query = await schema_evolution_asset.query(
-        "SELECT * FROM schema_evolution_asset"
+        "SELECT COUNT(*) c"
     )
-    count_query_result = duckdb.query(
-        "SELECT COUNT(*) c FROM schema_evolution_asset_query"
-    ).fetchone()
+    assert schema_evolution_asset_query
+    count_query_result = schema_evolution_asset_query.fetchone()
 
     assert count_query_result
 
@@ -145,12 +137,9 @@ async def test_when_data_asset_contains_empty_struct():
             },
         ]
 
-    empty_struct_asset_query = await empty_struct_asset.query(
-        "SELECT * FROM empty_struct_asset"
-    )
-    count_query_result = duckdb.query(
-        "SELECT COUNT(*) c FROM empty_struct_asset_query"
-    ).fetchone()
+    empty_struct_asset_query = await empty_struct_asset.query("SELECT COUNT(*) c")
+    assert empty_struct_asset_query
+    count_query_result = empty_struct_asset_query.fetchone()
 
     assert count_query_result
 
@@ -163,14 +152,12 @@ async def test_when_data_asset_yields_no_data():
     async def empty_asset():
         yield []
 
-    empty_asset_query = await empty_asset.query("SELECT * FROM empty_asset")
+    empty_asset_query = await empty_asset.query("SELECT *")
 
     if not empty_asset_query:
         return
 
-    count_query_result = duckdb.query(
-        "SELECT COUNT(*) c FROM empty_asset_query"
-    ).fetchone()
+    count_query_result = duckdb.query("SELECT COUNT(*) c").fetchone()
 
     assert count_query_result
 
@@ -200,13 +187,16 @@ async def test_nested_structs_with_many_keys_should_not_cast_to_string():
             )
         return rows
 
-    @asset("dict_array_asset_1.parquet")
+    @asset(
+        "dict_array_asset_1.parquet",
+        artifact_columns={"data": "MAP(STRING, STRING[])"},
+    )
     async def dict_array_asset_1():
         yield generate_rows(50)
         yield generate_rows(50)
 
     # Query the composed asset to check its contents
-    composed_query = await dict_array_asset_1.query("SELECT * FROM dict_array_asset_1")
+    composed_query = await dict_array_asset_1.query("SELECT *")
 
     assert composed_query
 

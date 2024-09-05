@@ -11,6 +11,7 @@ def asset(
     name: str | None = None,
     snapshot_artifacts: bool = False,
     artifact_filetype: ARTIFACT_FILE_TYPES = "json",
+    artifact_columns: dict[str, str] | None = None,
 ):
     # Prevent a circular reference as it references the env variable
     from mad_prefect.data_assets.data_asset import DataAsset
@@ -23,6 +24,7 @@ def asset(
             name,
             snapshot_artifacts,
             artifact_filetype,
+            artifact_columns,
         )
 
     return decorator

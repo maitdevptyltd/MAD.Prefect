@@ -5,6 +5,7 @@ import uuid
 import duckdb
 import httpx
 import jsonlines
+from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
@@ -17,9 +18,17 @@ class DataArtifact:
         self,
         path: str,
         data: object | None = None,
+        columns: dict[str, str] | None = None,
     ):
         self.path = path
+        filetype = os.path.splitext(self.path)[1].lstrip(".")
+
+        if filetype not in ["json", "parquet"]:
+            raise ValueError(f"Unsupported file type: {filetype}")
+
+        self.filetype: ARTIFACT_FILE_TYPES = cast(ARTIFACT_FILE_TYPES, filetype)
         self.data = data
+        self.columns = columns or {}
 
     async def persist(self):
         if not self.data:
@@ -28,14 +37,12 @@ class DataArtifact:
         await register_mad_protocol()
         duckdb.query("SET temp_directory = './.tmp/duckdb/'")
 
-        (_, path_extension) = os.path.splitext(self.path)
-
-        if path_extension == ".json":
+        if self.filetype == "json":
             await self._persist_json()
-        elif path_extension == ".parquet":
+        elif self.filetype == "parquet":
             await self._persist_parquet()
         else:
-            raise ValueError("Unsupported file format")
+            raise ValueError(f"Unsupported file format {self.filetype}")
 
         return await self.exists()
 
@@ -175,15 +182,10 @@ class DataArtifact:
                 yield batch_data
 
     async def query(self, query_str: str | None = None):
-        await register_mad_protocol()
-        duckdb.query("SET temp_directory = './.tmp/duckdb/'")
+        from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 
-        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
-
-        if query_str:
-            return duckdb.query(f"FROM asset_query {query_str}")
-
-        return asset_query
+        artifact_query = DataArtifactQuery([self], self.columns)
+        return await artifact_query.query(query_str)
 
     async def exists(self):
         fs = await get_fs()

@@ -3,13 +3,12 @@ import hashlib
 import inspect
 import json
 from typing import Callable, Literal
-import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
+from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
 from mad_prefect.filesystems import get_fs
-from mad_prefect.duckdb import register_mad_protocol
 import os
 
 
@@ -24,6 +23,7 @@ class DataAsset:
     name: str
     snapshot_artifacts: bool
     artifact_filetype: ARTIFACT_FILE_TYPES
+    artifact_columns: dict[str, str]
     asset_run: DataAssetRun
 
     def __init__(
@@ -34,6 +34,7 @@ class DataAsset:
         name: str | None = None,
         snapshot_artifacts: bool = False,
         artifact_filetype: Literal["parquet", "json"] = "json",
+        artifact_columns: dict[str, str] | None = None,
     ):
         self.__fn = fn
         self.__fn_signature = inspect.signature(fn)
@@ -43,7 +44,9 @@ class DataAsset:
         self.path = path
         self.artifacts_dir = artifacts_dir
         self.snapshot_artifacts = snapshot_artifacts
+
         self.artifact_filetype = artifact_filetype
+        self.artifact_columns = artifact_columns or {}
 
         self.id = self._generate_asset_guid()
 
@@ -60,6 +63,7 @@ class DataAsset:
             self.name,
             self.snapshot_artifacts,
             self.artifact_filetype,
+            self.artifact_columns,
         )
 
         asset._bind_arguments(*args, **kwargs)
@@ -145,6 +149,7 @@ class DataAsset:
             self.__fn(*self.__bound_arguments.args, **self.__bound_arguments.kwargs),
             base_artifact_path,
             self.artifact_filetype,
+            columns=self.artifact_columns,
         )
         result_artifact.data = await collector.collect()
 
@@ -161,29 +166,14 @@ class DataAsset:
         return result_artifact
 
     def _create_result_artifact(self):
-        return DataArtifact(self.path)
+        return DataArtifact(self.path, columns=self.artifact_columns)
 
     async def query(self, query_str: str | None = None):
-        await self()
+        result_artifact = await self()
 
-        # Set up filesystem abstraction
-        fs = await get_fs()
-        await register_mad_protocol()
-
-        # # If asset has been created query the file
-        if fs.glob(self.path):
-            return self._get_self_query(query_str)
-
-    def _get_self_query(self, query_str: str | None = None):
-        asset_query = duckdb.query(f"SELECT * FROM 'mad://{self.path}'")
-        duckdb.register(f"{self.name}_{self.id}", asset_query)
-
-        if not query_str:
-            return duckdb.query(f"SELECT * FROM {self.name}_{self.id}")
-
-        directed_string = query_str.replace(self.name, f"{self.name}_{self.id}")
-
-        return duckdb.query(directed_string)
+        if await result_artifact.exists():
+            artifact_query = DataArtifactQuery([result_artifact])
+            return await artifact_query.query(query_str)
 
     def _get_artifact_base_path(self):
         partition = ""
