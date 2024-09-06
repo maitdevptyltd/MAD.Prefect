@@ -1840,13 +1840,13 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "prefect"
-version = "2.20.4"
+version = "2.20.5"
 description = "Workflow orchestration and management."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "prefect-2.20.4-py3-none-any.whl", hash = "sha256:94071c3943979d4efc26ad8f1beb4950052122dc9c12b2303763eb8ce6773f41"},
-    {file = "prefect-2.20.4.tar.gz", hash = "sha256:e15862162a4c6daf68ea70918fac6a1a9aac707b6e42462cfaa605167cb1a755"},
+    {file = "prefect-2.20.5-py3-none-any.whl", hash = "sha256:8131011660e85d2dda2505db45a16ae492227324974743589b2b24261965e2c0"},
+    {file = "prefect-2.20.5.tar.gz", hash = "sha256:fc86388d099d5b35bc32e2b4dc6469de7a42da7259e53cad61ac17255391a6b7"},
 ]
 
 [package.dependencies]
