@@ -178,6 +178,10 @@ class DataAsset:
         )
         await self.asset_run.persist()
 
+        print(
+            f"Completed operations for asset_run_id: {self.asset_run.id}, on asset_id: {self.id}, on asset: {self.name}"
+        )
+
         return result_artifact
 
     def _create_result_artifact(self):

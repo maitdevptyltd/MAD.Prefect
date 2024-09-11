@@ -64,6 +64,7 @@ class DataArtifactCollector:
         fragment_number: int | None = None,
     ):
         filetype = self.filetype
+        base_path = base_path.rstrip("/")
 
         if params is None:
             return f"{base_path}/fragment={fragment_number}.{filetype}"
