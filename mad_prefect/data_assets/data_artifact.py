@@ -29,10 +29,17 @@ class DataArtifact:
         self.filetype: ARTIFACT_FILE_TYPES = cast(ARTIFACT_FILE_TYPES, filetype)
         self.data = data
         self.columns = columns or {}
+        self.persisted = False
 
     async def persist(self):
-        if not self.data:
-            return
+        # If we've already persisted this artifact this session, don't do anything
+        if self.persisted:
+            return True
+
+        # duckdb hangs with the not self.data check, so make sure self.data isn't
+        # a duckdb pyrelation before checking self.data
+        if not isinstance(self.data, duckdb.DuckDBPyRelation) and not self.data:
+            return False
 
         await register_mad_protocol()
         duckdb.query("SET temp_directory = './.tmp/duckdb/'")
@@ -44,7 +51,8 @@ class DataArtifact:
         else:
             raise ValueError(f"Unsupported file format {self.filetype}")
 
-        return await self.exists()
+        self.persisted = await self.exists()
+        return self.persisted
 
     async def _open(self):
         fs = await get_fs()

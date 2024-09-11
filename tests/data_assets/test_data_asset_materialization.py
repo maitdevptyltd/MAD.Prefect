@@ -92,8 +92,10 @@ async def test_when_data_asset_schema_evolution():
 
     @asset("schema_evolution_asset.parquet")
     async def schema_evolution_asset():
-        yield await schema_evolution_asset_1()
-        yield await schema_evolution_asset_2()
+        result = await schema_evolution_asset_1()
+        yield result
+        result = await schema_evolution_asset_2()
+        yield result
 
     schema_evolution_asset_query = await schema_evolution_asset.query(
         "SELECT COUNT(*) c"
@@ -187,10 +189,7 @@ async def test_nested_structs_with_many_keys_should_not_cast_to_string():
             )
         return rows
 
-    @asset(
-        "dict_array_asset_1.parquet",
-        artifact_columns={"data": "MAP(STRING, STRING[])"},
-    )
+    @asset("dict_array_asset_1.parquet")
     async def dict_array_asset_1():
         yield generate_rows(50)
         yield generate_rows(50)
