@@ -1,8 +1,10 @@
+from decimal import Decimal
 import random
 import string
 import duckdb
 from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_asset import DataAsset
+from datetime import datetime, date
 
 
 @asset("simple_asset.parquet")
@@ -205,3 +207,67 @@ async def test_nested_structs_with_many_keys_should_not_cast_to_string():
     # And it not a string type
     # duckdb GitHub Issue: https://github.com/duckdb/duckdb/issues/13734
     assert composed_query.description[1][1] != "STRING"
+
+
+async def test_materialize_artifact_with_decimal():
+    @asset("decimal_asset.parquet")
+    async def decimal_asset():
+        yield [
+            {"count": Decimal(1.1), "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": Decimal(5.5), "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": Decimal(10.75), "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+
+    decimal_asset_query = await decimal_asset.query("SELECT COUNT(*) c")
+    assert decimal_asset_query
+    count_query_result = decimal_asset_query.fetchone()
+    assert count_query_result
+
+    # The total count should be 3 since there are 3 rows in the output parquet
+    assert count_query_result[0] == 3
+
+    # Verify that the decimal values are correctly stored and retrieved
+    decimal_values_query = await decimal_asset.query("SELECT count")
+    assert decimal_values_query
+    decimal_values = [row[0] for row in decimal_values_query.fetchall()]
+    assert decimal_values == [1.1, 5.5, 10.75]
+
+
+async def test_materialize_artifact_with_datetime():
+    @asset("datetime_asset.parquet")
+    async def datetime_asset():
+        yield [
+            {
+                "timestamp": datetime(2023, 1, 1, 12, 0, 0),
+                "date": date(2023, 1, 1),
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+            },
+            {
+                "timestamp": datetime(2023, 1, 2, 12, 0, 0),
+                "date": date(2023, 2, 1),
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+            },
+            {
+                "timestamp": datetime(2023, 1, 3, 12, 0, 0),
+                "date": date(2023, 3, 1),
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+            },
+        ]
+
+    datetime_asset_query = await datetime_asset.query("SELECT COUNT(*) c")
+    assert datetime_asset_query
+    count_query_result = datetime_asset_query.fetchone()
+    assert count_query_result
+
+    # The total count should be 3 since there are 3 rows in the output parquet
+    assert count_query_result[0] == 3
+
+    # Verify that the datetime values are correctly stored and retrieved
+    datetime_values_query = await datetime_asset.query("SELECT timestamp, date")
+    assert datetime_values_query
+    datetime_values = [(row[0], row[1]) for row in datetime_values_query.fetchall()]
+    assert datetime_values == [
+        (datetime(2023, 1, 1, 12, 0, 0), date(2023, 1, 1)),
+        (datetime(2023, 1, 2, 12, 0, 0), date(2023, 2, 1)),
+        (datetime(2023, 1, 3, 12, 0, 0), date(2023, 3, 1)),
+    ]

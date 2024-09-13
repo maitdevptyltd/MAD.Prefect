@@ -1,7 +1,6 @@
-import datetime
+import json
 import os
 from typing import BinaryIO, Sequence, cast
-import uuid
 import duckdb
 import httpx
 import jsonlines
@@ -11,6 +10,7 @@ from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import pyarrow as pa
 import pyarrow.parquet as pq
+from mad_prefect.json.mad_json_encoder import MADJSONEncoder
 
 
 class DataArtifact:
@@ -59,22 +59,6 @@ class DataArtifact:
         return cast(BinaryIO, await fs.open(self.path, "wb", True))
 
     async def _persist_json(self):
-        # json doesn't support datetime or UUID out the box, so sanitize it from pyarrow
-        def __sanitize_data(data):
-            if isinstance(data, dict):
-                return {k: (__sanitize_data(v)) for k, v in data.items()}
-            elif isinstance(data, list):
-                return [__sanitize_data(item) for item in data]
-            elif isinstance(data, uuid.UUID):
-                return str(data)
-
-            # Parquet can handle dates, json doesn't by default
-            # TODO: how do we register the date data type with jsonl?
-            elif isinstance(data, datetime.datetime) or isinstance(data, datetime.date):
-                return data.isoformat()
-            else:
-                return data
-
         entities = self._yield_entities_to_persist()
         file: BinaryIO | None = None
         writer: jsonlines.Writer | None = None
@@ -86,7 +70,10 @@ class DataArtifact:
                 # Use the first entity to determine the file's schema
                 if not file or not writer:
                     file = await self._open()
-                    writer = jsonlines.Writer(file)
+                    writer = jsonlines.Writer(
+                        file,
+                        dumps=lambda obj: json.dumps(obj, cls=MADJSONEncoder),  # type: ignore
+                    )
 
                 table_or_batch: pa.RecordBatch | pa.Table = (
                     next_entity
@@ -96,7 +83,6 @@ class DataArtifact:
 
                 if table_or_batch:
                     next_entity = table_or_batch.to_pylist()
-                    next_entity = __sanitize_data(next_entity)
 
                 if not isinstance(next_entity, Sequence):
                     next_entity = [next_entity]
