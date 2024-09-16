@@ -4,6 +4,7 @@ from typing import BinaryIO, Sequence, cast
 import duckdb
 import httpx
 import jsonlines
+import pandas as pd
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.duckdb import register_mad_protocol
@@ -36,9 +37,7 @@ class DataArtifact:
         if self.persisted:
             return True
 
-        # duckdb hangs with the not self.data check, so make sure self.data isn't
-        # a duckdb pyrelation before checking self.data
-        if not isinstance(self.data, duckdb.DuckDBPyRelation) and not self.data:
+        if not self._truthy(self.data):
             return False
 
         await register_mad_protocol()
@@ -66,7 +65,7 @@ class DataArtifact:
         try:
             next_entity = await anext(entities)
 
-            while next_entity:
+            while self._truthy(next_entity):
                 # Use the first entity to determine the file's schema
                 if not file or not writer:
                     file = await self._open()
@@ -123,7 +122,7 @@ class DataArtifact:
         try:
             next_entity = await anext(entities)
 
-            while next_entity:
+            while self._truthy(next_entity):
                 b = __sanitize_data(next_entity)
                 table_or_batch: pa.RecordBatch | pa.Table = (
                     b
@@ -178,6 +177,9 @@ class DataArtifact:
 
                 batch_data = await batch_data.query()
 
+            if isinstance(batch_data, pd.DataFrame):
+                batch_data = duckdb.from_df(batch_data)
+
             if isinstance(batch_data, (duckdb.DuckDBPyRelation)):
                 # Convert duckdb into batches of arrow tables
                 reader = batch_data.fetch_arrow_reader(1000)
@@ -204,3 +206,16 @@ class DataArtifact:
     async def exists(self):
         fs = await get_fs()
         return fs.exists(self.path)
+
+    def _truthy(self, data):
+        if isinstance(data, pd.DataFrame):
+            if data.empty:
+                return False
+        # duckdb hangs with the not self.data check, so make sure self.data isn't
+        # a duckdb pyrelation before checking self.data
+        elif isinstance(data, duckdb.DuckDBPyRelation):
+            pass
+        elif not data:
+            return False
+
+        return True
