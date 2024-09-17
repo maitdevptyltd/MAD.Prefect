@@ -308,3 +308,34 @@ async def test_materialize_artifact_with_pandas_dataframe():
         (10, "951c58e4-b9a4-4478-883e-22760064e416"),
     ]
     assert dataframe_values == expected_values
+
+
+async def test_materialize_artifact_with_inner_struct():
+    @asset(
+        "inner_struct_asset.parquet",
+        artifact_columns={"data": "MAP(STRING, STRING)"},
+    )
+    async def inner_struct_asset():
+        yield [
+            {"id": "1", "data": {"field1": "value1", "field2": "value2"}},
+            {"id": "2", "data": {"field1": "value3", "field2": "value4"}},
+        ]
+
+    inner_struct_asset_query = await inner_struct_asset.query("SELECT COUNT(*) c")
+
+    assert inner_struct_asset_query
+
+    count_query_result = inner_struct_asset_query.fetchone()
+    assert count_query_result
+
+    # The total count should be 2 since there are 2 rows in the output parquet
+    assert count_query_result[0] == 2
+
+    # Verify that the id and data columns exist and data is of type MAP(STRING, STRING)
+    inner_struct_asset_query = await inner_struct_asset.query("SELECT *")
+    assert inner_struct_asset_query
+
+    # Check that the id column exists
+    assert "id" in [desc[0] for desc in inner_struct_asset_query.description]
+
+    assert inner_struct_asset_query.types[1] == "MAP(VARCHAR, VARCHAR)"
