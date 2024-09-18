@@ -7,6 +7,8 @@ from mad_prefect.data_assets.data_asset import DataAsset
 from datetime import datetime, date
 import pandas as pd
 
+from mad_prefect.data_assets.options import ReadJsonOptions
+
 
 @asset("simple_asset.parquet")
 def simple_asset():
@@ -313,7 +315,7 @@ async def test_materialize_artifact_with_pandas_dataframe():
 async def test_materialize_artifact_with_inner_struct():
     @asset(
         "inner_struct_asset.parquet",
-        artifact_columns={"data": "MAP(STRING, STRING)"},
+        read_json_options=ReadJsonOptions(columns={"data": "MAP(STRING, STRING)"}),
     )
     async def inner_struct_asset():
         yield [

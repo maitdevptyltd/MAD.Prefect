@@ -8,6 +8,7 @@ from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
+from mad_prefect.data_assets.options import ReadJsonOptions
 from mad_prefect.filesystems import get_fs
 import os
 
@@ -21,7 +22,7 @@ class DataAsset:
         name: str | None = None,
         snapshot_artifacts: bool = False,
         artifact_filetype: ARTIFACT_FILE_TYPES = "json",
-        artifact_columns: dict[str, str] | None = None,
+        read_json_options: ReadJsonOptions | None = None,
     ):
         self._fn: Callable = fn
         self._fn_signature: inspect.Signature = inspect.signature(fn)
@@ -33,7 +34,6 @@ class DataAsset:
         self.snapshot_artifacts: bool = snapshot_artifacts
 
         self.artifact_filetype: ARTIFACT_FILE_TYPES = artifact_filetype
-        self.artifact_columns: dict[str, str] = artifact_columns or {}
 
         self.id = self._generate_asset_guid()
 
@@ -41,6 +41,8 @@ class DataAsset:
         self.asset_run.id = self._generate_asset_iteration_guid()
         self.asset_run.asset_name = self.name
         self.asset_run.asset_path = self.path
+
+        self.read_json_options = read_json_options or ReadJsonOptions()
 
     def with_arguments(self, *args, **kwargs):
         asset = DataAsset(
@@ -50,7 +52,7 @@ class DataAsset:
             self.name,
             self.snapshot_artifacts,
             self.artifact_filetype,
-            self.artifact_columns,
+            self.read_json_options,
         )
 
         asset._bind_arguments(*args, **kwargs)
@@ -63,7 +65,7 @@ class DataAsset:
         name: str | None = None,
         snapshot_artifacts: bool | None = None,
         artifact_filetype: ARTIFACT_FILE_TYPES | None = None,
-        artifact_columns: dict[str, str] | None = None,
+        read_json_options: ReadJsonOptions | None = None,
     ):
         # Default to the current asset's options for any None values
         asset = DataAsset(
@@ -73,7 +75,7 @@ class DataAsset:
             name=name or self.name,
             snapshot_artifacts=snapshot_artifacts or self.snapshot_artifacts,
             artifact_filetype=artifact_filetype or self.artifact_filetype,
-            artifact_columns=artifact_columns or self.artifact_columns,
+            read_json_options=read_json_options or self.read_json_options,
         )
 
         # Ensure we're also passing through any bound arguments if we have them
@@ -164,7 +166,7 @@ class DataAsset:
             self._fn(*self._bound_arguments.args, **self._bound_arguments.kwargs),
             base_artifact_path,
             self.artifact_filetype,
-            columns=self.artifact_columns,
+            read_json_options=self.read_json_options,
         )
         result_artifact.data = await collector.collect()
 
@@ -185,7 +187,7 @@ class DataAsset:
         return result_artifact
 
     def _create_result_artifact(self):
-        return DataArtifact(self.path, columns=self.artifact_columns)
+        return DataArtifact(self.path, read_json_options=self.read_json_options)
 
     async def query(self, query_str: str | None = None):
         result_artifact = await self()

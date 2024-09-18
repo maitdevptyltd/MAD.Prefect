@@ -6,6 +6,7 @@ import httpx
 import jsonlines
 import pandas as pd
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
+from mad_prefect.data_assets.options import ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
@@ -19,7 +20,7 @@ class DataArtifact:
         self,
         path: str,
         data: object | None = None,
-        columns: dict[str, str] | None = None,
+        read_json_options: ReadJsonOptions | None = None,
     ):
         self.path = path
         filetype = os.path.splitext(self.path)[1].lstrip(".")
@@ -29,7 +30,7 @@ class DataArtifact:
 
         self.filetype: ARTIFACT_FILE_TYPES = cast(ARTIFACT_FILE_TYPES, filetype)
         self.data = data
-        self.columns = columns or {}
+        self.read_json_options = read_json_options or ReadJsonOptions()
         self.persisted = False
 
     async def persist(self):
@@ -200,7 +201,7 @@ class DataArtifact:
     async def query(self, query_str: str | None = None):
         from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 
-        artifact_query = DataArtifactQuery([self], self.columns)
+        artifact_query = DataArtifactQuery([self], self.read_json_options)
         return await artifact_query.query(query_str)
 
     async def exists(self):

@@ -1,22 +1,20 @@
 from typing import cast
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
+from mad_prefect.data_assets.options import ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.data_assets.data_artifact import DataArtifact
 
 
 class DataArtifactQuery:
 
-    artifacts: list[DataArtifact]
-    columns: dict[str, str]
-
     def __init__(
         self,
         artifacts: list[DataArtifact] | None = None,
-        columns: dict[str, str] | None = None,
+        read_json_options: ReadJsonOptions | None = None,
     ):
         self.artifacts = artifacts or []
-        self.columns = columns or {}
+        self.read_json_options = read_json_options or ReadJsonOptions()
 
     async def query(self, query_str: str | None = None):
         await register_mad_protocol()
@@ -56,12 +54,12 @@ class DataArtifactQuery:
                 f"SELECT * FROM read_parquet({globs}, hive_partitioning = true, union_by_name = true)"
             )
         else:
-            raise ValueError(f"Unsupported file format {self.filetype}")
+            raise ValueError(f"Unsupported file format {filetype}")
 
         # If the artifact has been provided columns, we override the default
         # auto-detected duckdb columns with any provided
         duckdb_columns_map = ""
-        if self.columns:
+        if self.read_json_options.columns:
             asset_query_describe = duckdb.query(f"DESCRIBE {artifact_base_query}")
             asset_query_schema = asset_query_describe.fetchall()
 
@@ -72,7 +70,7 @@ class DataArtifactQuery:
             }
 
             # Loop through each supplied column and override the existing data type
-            for col_name, new_col_type in self.columns.items():
+            for col_name, new_col_type in self.read_json_options.columns.items():
                 existing_col = asset_query_schema.get(col_name, None)
 
                 if not existing_col:
@@ -94,7 +92,7 @@ class DataArtifactQuery:
             if filetype == "json":
                 artifact_base_query = f"SELECT * FROM read_json({globs}, format='auto', columns={duckdb_columns_map}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
             else:
-                raise ValueError(f"Unsupported file format {self.filetype}")
+                raise ValueError(f"Unsupported file format {filetype}")
 
         artifact_query = duckdb.query(artifact_base_query)
         return artifact_query

@@ -1,5 +1,6 @@
 import httpx
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
+from mad_prefect.data_assets.options import ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
@@ -7,25 +8,19 @@ from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 
 class DataArtifactCollector:
 
-    collector: object
-    dir: str
-    artifacts: list[DataArtifact]
-    filetype: ARTIFACT_FILE_TYPES
-    columns: dict[str, str]
-
     def __init__(
         self,
         collector: object,
         dir: str,
         filetype: ARTIFACT_FILE_TYPES = "json",
         artifacts: list[DataArtifact] | None = None,
-        columns: dict[str, str] | None = None,
+        read_json_options: ReadJsonOptions | None = None,
     ):
         self.collector = collector
         self.dir = dir
         self.filetype = filetype
         self.artifacts = artifacts or []
-        self.columns = columns or {}
+        self.read_json_options = read_json_options or ReadJsonOptions()
 
     async def collect(self):
         fragment_num = 0
@@ -44,7 +39,7 @@ class DataArtifactCollector:
                 )
 
                 path = self._build_artifact_path(self.dir, params, fragment_num)
-                fragment_artifact = DataArtifact(path, fragment, self.columns)
+                fragment_artifact = DataArtifact(path, fragment, self.read_json_options)
 
             if await fragment_artifact.persist():
                 self.artifacts.append(fragment_artifact)
@@ -52,7 +47,7 @@ class DataArtifactCollector:
 
         artifact_query = DataArtifactQuery(
             artifacts=self.artifacts,
-            columns=self.columns,
+            read_json_options=self.read_json_options,
         )
 
         return await artifact_query.query()
