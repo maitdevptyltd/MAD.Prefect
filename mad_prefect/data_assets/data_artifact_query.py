@@ -34,65 +34,110 @@ class DataArtifactQuery:
 
         # Get the base query
         filetype: ARTIFACT_FILE_TYPES = cast(ARTIFACT_FILE_TYPES, filetypes.pop())
-        artifact_query = self._create_query(globs, filetype)
 
-        # Apply any additional query ontop
+        if filetype == "json":
+            artifact_query = self._create_query_json(globs)
+        elif filetype == "parquet":
+            artifact_query = self._create_query_parquet(globs)
+        else:
+            raise ValueError(f"Unsupported file format {filetype}")
+
+        # Apply any additional query on top
         if query_str:
             return duckdb.query(f"FROM artifact_query {query_str}")
 
         return artifact_query
 
-    def _create_query(self, globs: list[str], filetype: ARTIFACT_FILE_TYPES):
-        artifact_base_query: str
+    def _create_query_json(self, globs: list[str]):
+        # Prepare the globs string
+        globs_str = ", ".join(f"'{g}'" for g in globs)
+        globs_formatted = f"[{globs_str}]"
 
-        if filetype == "json":
-            artifact_base_query = f"SELECT * FROM read_json_auto({globs}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
-        elif filetype == "parquet":
-            # Parquet's columns cannot be provided while reading like json,
-            # as parquet stores column data type metadata already
-            return duckdb.query(
-                f"SELECT * FROM read_parquet({globs}, hive_partitioning = true, union_by_name = true)"
-            )
-        else:
-            raise ValueError(f"Unsupported file format {filetype}")
+        # Build the base options dict without 'columns'
+        base_options = self.read_json_options.model_dump(
+            exclude={"columns"},
+            exclude_none=True,
+        )
+        options_str = self._format_options_dict(base_options)
 
-        # If the artifact has been provided columns, we override the default
-        # auto-detected duckdb columns with any provided
-        duckdb_columns_map = ""
+        # Build the base query string without 'columns'
+        base_query = (
+            f"SELECT * FROM read_json({globs_formatted}, {options_str})"
+            if options_str
+            else f"SELECT * FROM read_json({globs_formatted})"
+        )
+
+        # Process columns after building the base query
         if self.read_json_options.columns:
-            asset_query_describe = duckdb.query(f"DESCRIBE {artifact_base_query}")
-            asset_query_schema = asset_query_describe.fetchall()
+            updated_columns = self._process_columns(
+                base_query, self.read_json_options.columns
+            )
 
-            # Convert the describe query into a dict of { column: {describe row} }
-            asset_query_schema = {
-                tuple[0]: dict(zip(asset_query_describe.columns, tuple))
-                for tuple in asset_query_schema
-            }
+            # Include 'columns' in options
+            options_with_columns = base_options.copy()
+            options_with_columns["columns"] = updated_columns
+            options_str_with_columns = self._format_options_dict(options_with_columns)
 
-            # Loop through each supplied column and override the existing data type
-            for col_name, new_col_type in self.read_json_options.columns.items():
-                existing_col = asset_query_schema.get(col_name, None)
+            # Rebuild the query with 'columns'
+            final_query = f"SELECT * FROM read_json({globs_formatted}, {options_str_with_columns})"
+        else:
+            final_query = base_query
 
-                if not existing_col:
-                    raise ValueError(f"Column {col_name} not found in artifact schema")
+        # Execute the query
+        artifact_query = duckdb.query(final_query)
+        return artifact_query
 
-                existing_col["column_type"] = new_col_type
+    def _process_columns(
+        self,
+        base_query: str,
+        columns: dict[str, str],
+    ) -> dict[str, str]:
+        # Describe the base query to get the schema
+        schema_info = duckdb.query(f"DESCRIBE {base_query}").fetchall()
+        schema_columns = {row[0]: row[1] for row in schema_info}
 
-            # Convert the new columns into a map format as duckdb expects
-            duckdb_columns_dict = {
-                col_name: col_type
-                for col_name, col_data in asset_query_schema.items()
-                for col_type in [col_data["column_type"]]
-            }
-
-            duckdb_columns_map = f"{duckdb_columns_dict}"
-
-        # If we had a new map, let's insert that into our query
-        if duckdb_columns_map:
-            if filetype == "json":
-                artifact_base_query = f"SELECT * FROM read_json({globs}, format='auto', columns={duckdb_columns_map}, hive_partitioning = true, union_by_name = true, maximum_object_size = 33554432)"
+        # Update column types based on provided columns
+        updated_columns = {}
+        for col_name, col_type in schema_columns.items():
+            if col_name in columns:
+                # Use the provided type
+                updated_columns[col_name] = columns[col_name]
             else:
-                raise ValueError(f"Unsupported file format {filetype}")
+                # Use the existing type from the schema
+                updated_columns[col_name] = col_type
 
+        return updated_columns
+
+    def _create_query_parquet(self, globs: list[str]):
+        # Prepare the globs string
+        globs_str = ", ".join(f"'{g}'" for g in globs)
+        globs_formatted = f"[{globs_str}]"
+
+        # Include only relevant options
+        options_dict = {"hive_partitioning": True, "union_by_name": True}
+        options_str = self._format_options_dict(options_dict)
+
+        # Build the query string
+        artifact_base_query = (
+            f"SELECT * FROM read_parquet({globs_formatted}, {options_str})"
+        )
+
+        # Execute the query
         artifact_query = duckdb.query(artifact_base_query)
         return artifact_query
+
+    def _format_options_dict(self, options_dict: dict) -> str:
+        def format_value(key, value):
+            if isinstance(value, bool):
+                return "TRUE" if value else "FALSE"
+            elif isinstance(value, str):
+                return f"'{value}'"
+            elif isinstance(value, dict):
+                return f"{value}"
+            else:
+                return str(value)
+
+        options_str = ", ".join(
+            f"{key} = {format_value(key, value)}" for key, value in options_dict.items()
+        )
+        return options_str
