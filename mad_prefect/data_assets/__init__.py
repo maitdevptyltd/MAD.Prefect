@@ -1,3 +1,4 @@
+import datetime
 import os
 from typing import Callable, Literal
 
@@ -14,6 +15,7 @@ def asset(
     snapshot_artifacts: bool = False,
     artifact_filetype: ARTIFACT_FILE_TYPES = "json",
     read_json_options: ReadJsonOptions | None = None,
+    cache_expiration: datetime.timedelta | None = None,
 ):
     # Prevent a circular reference as it references the env variable
     from mad_prefect.data_assets.data_asset import DataAsset
@@ -27,6 +29,7 @@ def asset(
             snapshot_artifacts,
             artifact_filetype,
             read_json_options,
+            cache_expiration,
         )
 
     return decorator

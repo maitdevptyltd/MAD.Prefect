@@ -1,14 +1,17 @@
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta, timezone
 import hashlib
 import inspect
 import json
 from typing import Callable
+import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
+from mad_prefect.data_assets import ASSET_METADATA_LOCATION
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
 from mad_prefect.data_assets.options import ReadJsonOptions
+from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import os
 
@@ -23,6 +26,7 @@ class DataAsset:
         snapshot_artifacts: bool = False,
         artifact_filetype: ARTIFACT_FILE_TYPES = "json",
         read_json_options: ReadJsonOptions | None = None,
+        cache_expiration: timedelta | None = None,
     ):
         self._fn: Callable = fn
         self._fn_signature: inspect.Signature = inspect.signature(fn)
@@ -34,6 +38,7 @@ class DataAsset:
         self.snapshot_artifacts: bool = snapshot_artifacts
 
         self.artifact_filetype: ARTIFACT_FILE_TYPES = artifact_filetype
+        self.cache_expiration: timedelta = cache_expiration or timedelta(0)
 
         self.id = self._generate_asset_guid()
 
@@ -53,6 +58,7 @@ class DataAsset:
             self.snapshot_artifacts,
             self.artifact_filetype,
             self.read_json_options,
+            self.cache_expiration,
         )
 
         asset._bind_arguments(*args, **kwargs)
@@ -66,6 +72,7 @@ class DataAsset:
         snapshot_artifacts: bool | None = None,
         artifact_filetype: ARTIFACT_FILE_TYPES | None = None,
         read_json_options: ReadJsonOptions | None = None,
+        cache_expiration: timedelta | None = None,
     ):
         # Default to the current asset's options for any None values
         asset = DataAsset(
@@ -76,6 +83,7 @@ class DataAsset:
             snapshot_artifacts=snapshot_artifacts or self.snapshot_artifacts,
             artifact_filetype=artifact_filetype or self.artifact_filetype,
             read_json_options=read_json_options or self.read_json_options,
+            cache_expiration=cache_expiration or self.cache_expiration,
         )
 
         # Ensure we're also passing through any bound arguments if we have them
@@ -136,12 +144,19 @@ class DataAsset:
         assert self._bound_arguments
         result_artifact = self._create_result_artifact()
 
+        # Prevent asset from being rematerialized inside a single session
         if self.asset_run and (materialized := self.asset_run.materialized):
-            # TODO: implement some sort of thoughtful caching. At the moment
-            # this will just prevent the asset from rematerializing during the same session
             return result_artifact
 
         self.asset_run.runtime = datetime.now(UTC)
+        self.last_materialized = await self._get_last_materialized()
+
+        # If data has been materialized within cache_expiration period return empty result_artifact
+        if await self._cached_result(result_artifact, self.asset_run.runtime):
+            return result_artifact
+
+        # Regenerate asset_run_id as runtime has now been set.
+        self.asset_run.id = self._generate_asset_iteration_guid()
 
         print(
             f"Running operations for asset_run_id: {self.asset_run.id}, on asset_id: {self.id}, on asset: {self.name}"
@@ -149,10 +164,6 @@ class DataAsset:
 
         # Write metadata before processing result for troubleshooting purposes
         await self.asset_run.persist()
-
-        # TODO: in future set up caching that reads from path
-        # Instead of running self.__fn if data
-        # Has been created within cache period
 
         # For each fragment in the data batch, we create a new artifact
         base_artifact_path = self._get_artifact_base_path()
@@ -201,8 +212,9 @@ class DataAsset:
         # If we snapshot artifacts, encapsulate the file in a directory with the runtime= parameter
         # so you can view changes over time
         if self.snapshot_artifacts and self.asset_run.runtime:
+            runtime_str = str(self.asset_run.runtime.isoformat()).replace(":", "_")
             partition = (
-                f"year={self.asset_run.runtime.year}/month={self.asset_run.runtime.month}/day={self.asset_run.runtime.day}/runtime={self.asset_run.runtime.isoformat()}/"
+                f"year={self.asset_run.runtime.year}/month={self.asset_run.runtime.month}/day={self.asset_run.runtime.day}/runtime={runtime_str}/"
                 if self.snapshot_artifacts
                 else ""
             )
@@ -232,3 +244,42 @@ class DataAsset:
     def _generate_asset_iteration_guid(self):
         hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{self.asset_run.runtime.isoformat() if self.asset_run.runtime else ''}:{str(self._bound_arguments.arguments) if self._bound_arguments else ''}"
         return hashlib.md5(hash_input.encode()).hexdigest()
+
+    async def _get_asset_metadata(self):
+        await register_mad_protocol()
+        fs = await get_fs()
+
+        metadata_glob = f"{ASSET_METADATA_LOCATION}/asset_name={self.name}/asset_id={self.id}/**/*.json"
+
+        if fs.glob(metadata_glob):
+            return duckdb.query(
+                f"SELECT UNNEST(data, max_depth:=2) FROM read_json('mad://{metadata_glob}')"
+            )
+
+    async def _get_last_materialized(self):
+        asset_metadata = await self._get_asset_metadata()
+
+        if not asset_metadata:
+            return
+
+        last_materialized_query = duckdb.query(
+            "SELECT max(strptime(materialized, '%Y-%m-%dT%H:%M:%S.%fZ')) FROM asset_metadata"
+        ).fetchone()
+
+        if last_materialized_query and last_materialized_query[0]:
+            # Convert DuckDB timestamp to Python datetime
+            last_materialized = datetime.fromisoformat(str(last_materialized_query[0]))
+            # Ensure it's UTC
+            return last_materialized.replace(tzinfo=timezone.utc)
+
+    async def _cached_result(self, result_artifact: DataArtifact, runtime: datetime):
+        # Check if data has been materialized within cache_expiration period
+        if (
+            self.last_materialized
+            and (self.last_materialized > runtime - self.cache_expiration)
+            and await result_artifact.exists()
+        ):
+            print(
+                f"Retrieving cached result_artifact for asset_id: {self.id} | asset: {self.name}"
+            )
+            return True

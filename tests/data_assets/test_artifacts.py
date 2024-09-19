@@ -1,4 +1,5 @@
 from mad_prefect.data_assets import asset
+from mad_prefect.filesystems import get_fs
 
 
 async def test_default_artifact_path():
