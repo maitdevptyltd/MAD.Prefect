@@ -12,3 +12,5 @@ class ReadJsonOptions(BaseModel):
     field_appearance_threshold: Optional[int] = 0
     map_inference_threshold: Optional[int] = -1
     columns: Optional[Dict[str, str]] = None
+
+    timestampformat: Optional[str] = None
