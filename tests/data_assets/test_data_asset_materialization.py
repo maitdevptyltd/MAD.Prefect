@@ -341,3 +341,50 @@ async def test_materialize_artifact_with_inner_struct():
     assert "id" in [desc[0] for desc in inner_struct_asset_query.description]
 
     assert inner_struct_asset_query.types[1] == "MAP(VARCHAR, VARCHAR)"
+
+
+async def test_json_artifacts_with_different_timestamp_precisions_are_deserialized_as_timestamps():
+    @asset("datetime_asset_precision.parquet", artifact_filetype="json")
+    async def datetime_asset_precision():
+        yield [
+            {
+                "timestamp": datetime(2023, 1, 1, 12, 5, 50, 99),
+                "timestamp_ez": datetime(2023, 1, 1, 12),
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+            },
+            {
+                "timestamp": datetime(2023, 1, 2, 12, 0, 0, 55),
+                "timestamp_ez": datetime(2023, 1, 1, 11),
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+            },
+            {
+                "timestamp": datetime(2023, 1, 3, 12, 0, 0, 33),
+                "timestamp_ez": datetime(2023, 1, 1, 10),
+                "id": "951c58e4-b9a4-4478-883e-22760064e416",
+            },
+        ]
+
+    datetime_asset_query = await datetime_asset_precision.query("SELECT COUNT(*) c")
+    assert datetime_asset_query
+    count_query_result = datetime_asset_query.fetchone()
+    assert count_query_result
+
+    # The total count should be 3 since there are 3 rows in the output parquet
+    assert count_query_result[0] == 3
+
+    # Verify that the datetime values are correctly stored and retrieved
+    datetime_values_query = await datetime_asset_precision.query(
+        "SELECT timestamp, timestamp_ez"
+    )
+
+    assert datetime_values_query
+    assert datetime_values_query.types[0] == "timestamp"
+    assert datetime_values_query.types[1] == "timestamp"
+
+    assert datetime_values_query
+    datetime_values = [row[0] for row in datetime_values_query.fetchall()]
+    assert datetime_values == [
+        datetime(2023, 1, 1, 12, 5, 50, 99),
+        datetime(2023, 1, 2, 12, 0, 0, 55),
+        datetime(2023, 1, 3, 12, 0, 0, 33),
+    ]

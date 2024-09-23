@@ -12,7 +12,9 @@ class MADJSONEncoder(json.JSONEncoder):
         if isinstance(data, datetime.datetime):
             # DuckDB doesn't recognize the ISO 8601 timestamp format with 'T' by default.
             # DuckDB's automatic type inference for timestamps expects a space ' ' between the date and time components.
-            return data.isoformat(" ")
+            return data.isoformat(
+                " ", "microseconds"
+            )  # Always serialize microseconds as duckdb does not support a variable date format
 
         if isinstance(data, datetime.date):
             return data.isoformat()
