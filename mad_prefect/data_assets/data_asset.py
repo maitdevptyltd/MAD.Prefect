@@ -186,9 +186,9 @@ class DataAsset:
 
         # Record information about the run
         self.asset_run.materialized = datetime.now(UTC)
-        self.asset_run.duration_miliseconds = int(
-            (self.asset_run.materialized - self.asset_run.runtime).microseconds / 1000
-        )
+        duration = self.asset_run.materialized - self.asset_run.runtime
+        self.asset_run.duration_miliseconds = int(duration.total_seconds() * 1000)
+
         await self.asset_run.persist()
 
         print(
