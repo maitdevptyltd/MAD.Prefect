@@ -28,17 +28,29 @@ class FsspecFileSystem(
     _block_type_name = "Fsspec Advanced FileSystem"
 
     basepath: str
-    storage_options: SecretDict = SecretDict({})
+    storage_options: SecretDict
 
-    @model_validator(mode="after")
-    def init_fs(self):
-        options = self.storage_options.get_secret_value().copy()
-        fs, fs_url = fsspec.core.url_to_fs(self.basepath, **options)
+    def __init__(
+        self,
+        basepath: str,
+        storage_options: SecretDict | None = None,
+        **kwargs,
+    ):
+        storage_options = storage_options or SecretDict(kwargs or {})
+
+        super().__init__(
+            basepath=basepath,
+            storage_options=storage_options,
+            **kwargs,
+        )
+
+        fs, fs_url = fsspec.core.url_to_fs(
+            basepath,
+            **(storage_options.get_secret_value()),
+        )
 
         self._fs: fsspec.AbstractFileSystem = fs
         self._fs_url: str = fs_url
-
-        return self
 
     def _resolve_path(self, path: str):
         # resolve the path relative to the basepath as supplied by fsspec
