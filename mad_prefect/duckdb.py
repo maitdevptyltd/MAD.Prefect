@@ -2,7 +2,6 @@ from typing import cast
 import duckdb
 import fsspec
 from mad_prefect.filesystems import FILESYSTEM_URL, get_fs
-from prefect.blocks.fields import SecretDict
 import warnings
 
 
