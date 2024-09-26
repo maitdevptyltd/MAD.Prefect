@@ -33,9 +33,12 @@ class FsspecFileSystem(
     def __init__(
         self,
         basepath: str,
-        storage_options: SecretDict | None = None,
+        storage_options: SecretDict | dict | None = None,
         **kwargs,
     ):
+        if isinstance(storage_options, dict):
+            storage_options = SecretDict(storage_options)
+
         storage_options = storage_options or SecretDict(kwargs or {})
 
         super().__init__(
