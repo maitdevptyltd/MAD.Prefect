@@ -1,14 +1,15 @@
-from typing import Any, cast
+from typing import cast
 import duckdb
 import fsspec
 from mad_prefect.filesystems import FILESYSTEM_URL, get_fs
+from prefect.blocks.fields import SecretDict
 import warnings
 
 
 class MadFileSystem(fsspec.AbstractFileSystem):
     protocol = "mad"
 
-    def __init__(self, basepath: str, storage_options=None, **kwargs):
+    def __init__(self, basepath: str, storage_options: dict | None = None, **kwargs):
         options = storage_options or kwargs
         fs, fs_url = fsspec.core.url_to_fs(basepath, **options)
 
@@ -64,7 +65,7 @@ async def register_mad_protocol(connection: duckdb.DuckDBPyConnection | None = N
         return
 
     fs = await get_fs()
-    mad_fs = MadFileSystem(fs.basepath, fs.storage_options)
+    mad_fs = MadFileSystem(fs.basepath, fs.storage_options.get_secret_value())
 
     if connection:
         connection.register_filesystem(cast(str, mad_fs))

@@ -9,6 +9,7 @@ import fsspec
 import fsspec.utils
 from prefect.serializers import JSONSerializer
 from prefect.blocks.fields import SecretDict
+from pydantic import model_validator
 import sshfs
 import tempfile
 
@@ -27,16 +28,17 @@ class FsspecFileSystem(
     _block_type_name = "Fsspec Advanced FileSystem"
 
     basepath: str
-    storage_options: SecretDict = {}
+    storage_options: SecretDict = SecretDict({})
 
-    def __init__(self, basepath: str, storage_options=None, **kwargs):
-        self.basepath = basepath
-        self.storage_options = storage_options or kwargs
-
-        fs, fs_url = fsspec.core.url_to_fs(basepath, **self.storage_options)
+    @model_validator(mode="after")
+    def init_fs(self):
+        options = self.storage_options.get_secret_value().copy()
+        fs, fs_url = fsspec.core.url_to_fs(self.basepath, **options)
 
         self._fs: fsspec.AbstractFileSystem = fs
         self._fs_url: str = fs_url
+
+        return self
 
     def _resolve_path(self, path: str):
         # resolve the path relative to the basepath as supplied by fsspec
@@ -46,7 +48,10 @@ class FsspecFileSystem(
         # return relative paths to the basepath
         abs_paths = self._fs.glob(self._resolve_path(path))
 
-        return [abs_path.replace(f"{self._fs_url}/", "") for abs_path in abs_paths]
+        return [
+            cast(str, abs_path).replace(f"{self._fs_url}/", "")
+            for abs_path in abs_paths
+        ]
 
     def mkdirs(self, path: str, exist_ok: bool = False):
         self._fs.mkdirs(self._resolve_path(path), exist_ok=exist_ok)
@@ -54,7 +59,6 @@ class FsspecFileSystem(
     def exists(self, path: str):
         return self._fs.exists(self._resolve_path(path))
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def read_path(self, path: str) -> bytes:
         path = self._resolve_path(path)
 
@@ -71,7 +75,6 @@ class FsspecFileSystem(
 
         return cast(bytes, file)
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def write_path(self, path: str, content: bytes):
         resolved_path = self._resolve_path(path)
 
@@ -95,7 +98,6 @@ class FsspecFileSystem(
 
         return path
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def move_path(self, path: str, dest: str) -> str:
         source_path = self._resolve_path(path)
         destination_path = self._resolve_path(dest)
@@ -112,7 +114,6 @@ class FsspecFileSystem(
 
         return destination_path
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def delete_path(self, path: str, recursive: bool = False) -> None:
         resolved_path = self._resolve_path(path)
 
@@ -121,13 +122,11 @@ class FsspecFileSystem(
 
         self._fs.rm(resolved_path, recursive=recursive)
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def get_directory(
         self, from_path: str | None = None, local_path: str | None = None
     ) -> None:
         raise NotImplementedError()
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def put_directory(
         self,
         local_path: str | None = None,
@@ -136,7 +135,6 @@ class FsspecFileSystem(
     ) -> None:
         raise NotImplementedError()
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def write_data(
         self,
         path: str,
@@ -176,7 +174,6 @@ class FsspecFileSystem(
         # write to the fs
         return await self.write_path(path, data)
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def read_data(self, path: str, encoding: str = "utf-8"):
         data = await self.read_path(path)
 
@@ -199,7 +196,6 @@ class FsspecFileSystem(
 
         return data
 
-    @prefect.utilities.asyncutils.sync_compatible
     async def open(self, path: str, mode: str = "rb", auto_mkdir: bool = False):
         resolved_path = self._resolve_path(path)
 
@@ -217,12 +213,11 @@ class FsspecFileSystem(
         return self._fs.open(resolved_path, mode=mode)
 
 
-@prefect.utilities.asyncutils.sync_compatible
 async def get_fs():
     result: FsspecFileSystem
 
     if FILESYSTEM_BLOCK_NAME:
-        result = await FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME)
+        result = cast(FsspecFileSystem, await FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME))  # type: ignore
     else:
         result = FsspecFileSystem(basepath=FILESYSTEM_URL)
 
