@@ -228,12 +228,16 @@ class FsspecFileSystem(
         return self._fs.open(resolved_path, mode=mode)
 
 
+_get_fs_result: FsspecFileSystem | None = None
+
+
 async def get_fs():
-    result: FsspecFileSystem
+    global _get_fs_result
 
-    if FILESYSTEM_BLOCK_NAME:
-        result = cast(FsspecFileSystem, await FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME))  # type: ignore
-    else:
-        result = FsspecFileSystem(basepath=FILESYSTEM_URL)
+    if not _get_fs_result:
+        if FILESYSTEM_BLOCK_NAME:
+            _get_fs_result = cast(FsspecFileSystem, await FsspecFileSystem.load(FILESYSTEM_BLOCK_NAME))  # type: ignore
+        else:
+            _get_fs_result = FsspecFileSystem(basepath=FILESYSTEM_URL)
 
-    return result
+    return _get_fs_result
