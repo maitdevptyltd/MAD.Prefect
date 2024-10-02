@@ -2,7 +2,7 @@
 name = "mad-prefect"
 version = "1.0.0rc1"
 description = ""
-authors = ["Maitland Marshall <maitland@mait.dev>"]
+authors = ["MAIT DEV Pty Ltd <maitland@mait.dev>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
