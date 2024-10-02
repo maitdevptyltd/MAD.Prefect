@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mad-prefect"
-version = "1.0.0rc1"
+version = "1.0.0"
 description = ""
 authors = ["MAIT DEV Pty Ltd <maitland@mait.dev>"]
 readme = "README.md"
@@ -25,3 +25,10 @@ commitizen = "^3.29.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "pep440"
+version_provider = "poetry"
+update_changelog_on_bump = true
