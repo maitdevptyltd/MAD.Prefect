@@ -16,6 +16,9 @@ class MADJSONEncoder(json.JSONEncoder):
                 " ", "microseconds"
             )  # Always serialize microseconds as duckdb does not support a variable date format
 
+        if isinstance(data, datetime.time):
+            return data.isoformat()
+
         if isinstance(data, datetime.date):
             return data.isoformat()
 
