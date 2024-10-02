@@ -1,3 +1,9 @@
+## 1.0.1 (2024-10-02)
+
+### Fix
+
+- **MADJSONEncoder**: encode datetime.time in isoformat (#1)
+
 ## 1.0.0 (2024-10-02)
 
 ### Feat
