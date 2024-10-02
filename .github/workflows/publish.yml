@@ -1,0 +1,62 @@
+name: publish
+
+on:
+  release: 
+    types: [published]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: 'x64'
+          fetch-depth: 0
+
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          virtualenvs-path: .venv
+          installer-parallel: true
+          
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+          
+      - name: Build
+        run: poetry build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mad-prefect
+    permissions: 
+      id-token: write
+
+    steps:
+        - name: Download all the dists
+          uses: actions/download-artifact@v4
+          with:
+            name: python-package-distributions
+            path: dist/
+        - name: Publish to PyPI
+          uses: pypa/gh-action-pypi-publish@release/v1
+
+            
+          
