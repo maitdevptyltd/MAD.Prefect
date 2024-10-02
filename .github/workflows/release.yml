@@ -33,7 +33,7 @@ jobs:
         run: poetry install --no-interaction --no-root
 
       - name: Create bump and changelog
-        run: cz --no-raise 21 bump --yes --changelog --check-consistency --dry-run --changelog-to-stdout >body.md
+        run: poetry run cz --no-raise 21 bump --yes --changelog --check-consistency --dry-run --changelog-to-stdout >body.md
           
       - name: Release
         uses: softprops/action-gh-release@v1
