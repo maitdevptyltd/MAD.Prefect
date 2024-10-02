@@ -20,10 +20,16 @@ jobs:
           python-version: '3.11'
           architecture: 'x64'
 
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          virtualenvs-path: .venv
+          installer-parallel: true
+          
       - name: Install dependencies
-        run: |
-          pip install poetry
-          poetry install
+        run: poetry install --no-interaction --no-root
 
       - name: Create bump and changelog
         uses: commitizen-tools/commitizen-action@master
