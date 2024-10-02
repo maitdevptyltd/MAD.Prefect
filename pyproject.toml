@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "mad-prefect"
-version = "0.1.0"
+version = "1.0.0rc1"
 description = ""
-authors = ["Maitland Marshall <maitland@mait.dev>"]
+authors = ["MAIT DEV Pty Ltd <maitland@mait.dev>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -20,7 +20,15 @@ pytest = "^7.4.3"
 pytest-asyncio = "^0.21.1"
 ipykernel = "^6.29.4"
 faker = "^27.0.0"
+commitizen = "^3.29.1"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "pep440"
+version_provider = "poetry"
+update_changelog_on_bump = true
