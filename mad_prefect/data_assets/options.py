@@ -11,6 +11,7 @@ class ReadJsonOptions(BaseModel):
     # By default, always try and parse a nested object as a struct
     field_appearance_threshold: Optional[int] = 0
     map_inference_threshold: Optional[int] = -1
+    sample_size: Optional[int] = -1
     columns: Optional[Dict[str, str]] = None
 
     timestampformat: Optional[str] = None
