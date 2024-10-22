@@ -12,6 +12,14 @@ class ReadJsonOptions(BaseModel):
     field_appearance_threshold: Optional[int] = 0
     map_inference_threshold: Optional[int] = -1
     sample_size: Optional[int] = -1
-    columns: Optional[Dict[str, str]] = None
 
+    columns: Optional[Dict[str, str]] = None
     timestampformat: Optional[str] = None
+    auto_detect: Optional[bool] = None
+    compression: Optional[str] = None
+    convert_strings_to_integers: Optional[bool] = None
+    dateformat: Optional[str] = None
+    filename: Optional[bool] = None
+    ignore_errors: Optional[bool] = None
+    maximum_depth: Optional[int] = None
+    records: Optional[str] = None
