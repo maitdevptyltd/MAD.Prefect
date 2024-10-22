@@ -1,3 +1,9 @@
+## 1.2.0 (2024-10-22)
+
+### Feat
+
+- add sample_size with default value to ReadJsonOptions (#4)
+
 ## 1.1.0 (2024-10-02)
 
 ### Feat
