@@ -49,6 +49,10 @@ class DataAsset:
 
         self.read_json_options = read_json_options or ReadJsonOptions()
 
+        # If the function has no parameters, bind empty arguments immediately
+        if not self._fn_signature.parameters:
+            self._bind_arguments()
+
     def with_arguments(self, *args, **kwargs):
         asset = DataAsset(
             self._fn,
@@ -134,12 +138,21 @@ class DataAsset:
         return self
 
     async def __call__(self, *args, **kwargs):
-        if not self._bound_arguments:
-            # For now, if there are no bound arguments, then we will create a new instance of a DataAsset
-            # which will prevent collision with same referenced assets with different parameters
-            # called directly through DataAsset(args, kwargs)
+        if args or kwargs:
+            # If arguments are passed in, create a new instance with bound arguments
             asset_with_arguments = self.with_arguments(*args, **kwargs)
             return await asset_with_arguments()
+        else:
+            # No arguments passed in
+            if not self._bound_arguments:
+
+                # If the function expects no parameters, bind empty arguments
+                if not self._fn_signature.parameters:
+                    self._bind_arguments()
+                else:
+                    raise TypeError(
+                        f"{self.name}() missing required positional arguments"
+                    )
 
         assert self._bound_arguments
         result_artifact = self._create_result_artifact()
