@@ -1,3 +1,9 @@
+## 1.3.0 (2024-10-24)
+
+### Feat
+
+- add additional read_json options from documentation
+
 ## 1.2.0 (2024-10-22)
 
 ### Feat
