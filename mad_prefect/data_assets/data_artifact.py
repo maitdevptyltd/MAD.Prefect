@@ -54,6 +54,10 @@ class DataArtifact:
                 if isinstance(fs._fs.protocol, str)
                 else fs._fs.protocol[0]
             )
+
+            # Ensure the directory for the path exists
+            fs.mkdirs(os.path.dirname(self.path), exist_ok=True)
+
             path = fs._resolve_path(self.path)
             d = self.data
 
