@@ -127,6 +127,8 @@ class DataArtifact:
             if file:
                 file.close()
 
+            await entities.aclose()
+
     async def _persist_parquet(self):
         def __sanitize_data(data):
             """
@@ -188,6 +190,8 @@ class DataArtifact:
 
             if file:
                 file.close()
+
+            await entities.aclose()
 
     async def _yield_entities_to_persist(self):
         from mad_prefect.data_assets.data_asset import DataAsset
