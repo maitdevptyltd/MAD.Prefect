@@ -240,7 +240,8 @@ class DataArtifact:
 
     async def exists(self):
         fs = await get_fs()
-        return fs.exists(self.path)
+        self.persisted = fs.exists(self.path)
+        return self.persisted
 
     def _truthy(self, data):
         if isinstance(data, pd.DataFrame):
