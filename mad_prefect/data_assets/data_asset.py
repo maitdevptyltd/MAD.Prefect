@@ -2,6 +2,7 @@ from datetime import datetime, UTC, timedelta, timezone
 import hashlib
 import inspect
 import json
+import re
 from typing import Callable
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
@@ -121,14 +122,14 @@ class DataAsset:
             )
 
         self.path = resolved_path
-        self.name = resolved_name
+        self.name = self._sanitize_name(resolved_name)
         self.artifacts_dir = resolved_artifacts_dir
 
         def _handle_unknown_types(data):
             if isinstance(data, DataAsset):
                 return {"name": self.name, "fn": self._fn}
 
-        # Recalculate the ids incase the parameters have changed
+        # Recalculate the ids in case the parameters have changed
         self.id = self.asset_run.asset_id = self._generate_asset_guid()
         self.asset_run.id = self._generate_asset_iteration_guid()
         self.asset_run.asset_path = self.path
@@ -145,7 +146,6 @@ class DataAsset:
         else:
             # No arguments passed in
             if not self._bound_arguments:
-
                 # If the function expects no parameters, bind empty arguments
                 if not self._fn_signature.parameters:
                     self._bind_arguments()
@@ -260,6 +260,10 @@ class DataAsset:
 
         input_str = input_str.format(**self._bound_arguments.arguments)
         return input_str
+
+    def _sanitize_name(self, name: str) -> str:
+        # Replace any character that's not alphanumeric, underscore, or hyphen with an underscore
+        return re.sub(r"[^A-Za-z0-9_\-]", "_", name)
 
     def _generate_asset_guid(self):
         hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self._bound_arguments.arguments) if self._bound_arguments else ''}"
