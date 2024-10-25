@@ -72,6 +72,10 @@ class DataArtifact:
                 raise ValueError(f"Unsupported file format {self.filetype}")
 
         self.persisted = await self.exists()
+
+        # Release the reference to data to free up memory
+        self.data = None
+
         return self.persisted
 
     async def _open(self):
@@ -205,13 +209,16 @@ class DataArtifact:
                 # Convert duckdb into batches of arrow tables
                 reader = batch_data.fetch_arrow_reader(1000)
 
-                while True:
-                    try:
-                        # this will yield a pyarrow RecordBatch
-                        batch = reader.read_next_batch()
-                        yield batch
-                    except StopIteration as stop:
-                        break
+                try:
+                    while True:
+                        try:
+                            # this will yield a pyarrow RecordBatch
+                            batch = reader.read_next_batch()
+                            yield batch
+                        except StopIteration as stop:
+                            break
+                finally:
+                    reader.close()
 
             elif isinstance(batch_data, httpx.Response):
                 yield batch_data.json()
