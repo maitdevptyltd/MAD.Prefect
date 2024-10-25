@@ -2,7 +2,6 @@ from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.data_assets.data_artifact import DataArtifact
-from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 
 
 class DataArtifactCollector:
@@ -37,12 +36,7 @@ class DataArtifactCollector:
                 self.artifacts.append(fragment_artifact)
                 fragment_num += 1
 
-        artifact_query = DataArtifactQuery(
-            artifacts=self.artifacts,
-            read_json_options=self.read_json_options,
-        )
-
-        return await artifact_query.query()
+        return self.artifacts
 
     def _build_artifact_path(
         self,

@@ -192,7 +192,18 @@ class DataAsset:
             self.artifact_filetype,
             read_json_options=self.read_json_options,
         )
-        result_artifact.data = await collector.collect()
+
+        # Collect the artifacts yielded from the materialization fn
+        collector_artifacts = await collector.collect()
+
+        # Query each of the artifacts [filepath1, filepath2, etc] with duckdb
+        artifact_query = DataArtifactQuery(
+            artifacts=collector_artifacts,
+            read_json_options=self.read_json_options,
+        )
+
+        # The result is all the artifacts unioned
+        result_artifact.data = await artifact_query.query()
 
         # Persist the result artifact to storage, fully materialize it
         await result_artifact.persist()
