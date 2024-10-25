@@ -23,7 +23,6 @@ DataAsset materialization function can support yield and return
     - returned objects are stored directly into path, filetype indicated by the path file extension
 DataAsset can support many yield/return types
     - regular python arrays/dicts
-    - yielded httpx.Response are stored as artifact fragments, saved using a valid hive partition path if it has url params
     - raw text/string
 DataAsset can support a custom/provided artifacts directory
     - @asset(path="..", artifact_path="raw/..")
