@@ -1,6 +1,7 @@
 from decimal import Decimal
 import random
 import string
+from uuid import UUID
 import duckdb
 from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_asset import DataAsset
@@ -305,9 +306,9 @@ async def test_materialize_artifact_with_pandas_dataframe():
     assert dataframe_values_query
     dataframe_values = [(row[0], row[1]) for row in dataframe_values_query.fetchall()]
     expected_values = [
-        (1, "951c58e4-b9a4-4478-883e-22760064e416"),
-        (5, "951c58e4-b9a4-4478-883e-22760064e416"),
-        (10, "951c58e4-b9a4-4478-883e-22760064e416"),
+        (1, UUID("951c58e4-b9a4-4478-883e-22760064e416")),
+        (5, UUID("951c58e4-b9a4-4478-883e-22760064e416")),
+        (10, UUID("951c58e4-b9a4-4478-883e-22760064e416")),
     ]
     assert dataframe_values == expected_values
 

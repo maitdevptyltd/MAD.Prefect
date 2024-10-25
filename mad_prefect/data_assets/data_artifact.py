@@ -44,12 +44,28 @@ class DataArtifact:
         await register_mad_protocol()
         duckdb.query("SET temp_directory = './.tmp/duckdb/'")
 
-        if self.filetype == "json":
-            await self._persist_json()
-        elif self.filetype == "parquet":
-            await self._persist_parquet()
+        if isinstance(self.data, duckdb.DuckDBPyRelation):
+            # There is a bug with fsspec and duckdb see test: test_overwriting_existing_file
+            # to work around the bug, instead of setting (use_tmp_file 0) in the query, we will directly reference
+            # the wrapped filesystem
+            fs = await get_fs()
+            protocol = (
+                fs._fs.protocol
+                if isinstance(fs._fs.protocol, str)
+                else fs._fs.protocol[0]
+            )
+            path = fs._resolve_path(self.path)
+            d = self.data
+
+            duckdb.register_filesystem(cast(str, fs._fs))
+            duckdb.execute(f"COPY d TO '{protocol}://{path}'")
         else:
-            raise ValueError(f"Unsupported file format {self.filetype}")
+            if self.filetype == "json":
+                await self._persist_json()
+            elif self.filetype == "parquet":
+                await self._persist_parquet()
+            else:
+                raise ValueError(f"Unsupported file format {self.filetype}")
 
         self.persisted = await self.exists()
         return self.persisted
