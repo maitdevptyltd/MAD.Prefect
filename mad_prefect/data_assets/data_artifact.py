@@ -42,7 +42,10 @@ class DataArtifact:
             return False
 
         await register_mad_protocol()
-        duckdb.query("SET temp_directory = './.tmp/duckdb/'")
+
+        # preserve_insertion_order to improve memory usage.
+        # https://duckdb.org/docs/guides/performance/how_to_tune_workloads.html#the-preserve_insertion_order-option
+        duckdb.query("SET preserve_insertion_order = false;")
 
         if isinstance(self.data, duckdb.DuckDBPyRelation):
             # There is a bug with fsspec and duckdb see test: test_overwriting_existing_file
