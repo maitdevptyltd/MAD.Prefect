@@ -1,9 +1,7 @@
-import httpx
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.data_assets.data_artifact import DataArtifact
-from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 
 
 class DataArtifactCollector:
@@ -31,26 +29,14 @@ class DataArtifactCollector:
             if isinstance(fragment, DataArtifact):
                 fragment_artifact = fragment
             else:
-                params = (
-                    dict(fragment.request.url.params)
-                    if isinstance(fragment, httpx.Response)
-                    and fragment.request.url.params
-                    else None
-                )
-
-                path = self._build_artifact_path(self.dir, params, fragment_num)
+                path = self._build_artifact_path(self.dir, fragment_number=fragment_num)
                 fragment_artifact = DataArtifact(path, fragment, self.read_json_options)
 
             if await fragment_artifact.persist():
                 self.artifacts.append(fragment_artifact)
                 fragment_num += 1
 
-        artifact_query = DataArtifactQuery(
-            artifacts=self.artifacts,
-            read_json_options=self.read_json_options,
-        )
-
-        return await artifact_query.query()
+        return self.artifacts
 
     def _build_artifact_path(
         self,

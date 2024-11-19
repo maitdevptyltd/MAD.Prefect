@@ -2,6 +2,7 @@ from datetime import datetime, UTC, timedelta, timezone
 import hashlib
 import inspect
 import json
+import re
 from typing import Callable
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
@@ -48,6 +49,10 @@ class DataAsset:
         self.asset_run.asset_path = self.path
 
         self.read_json_options = read_json_options or ReadJsonOptions()
+
+        # If the function has no parameters, bind empty arguments immediately
+        if not self._fn_signature.parameters:
+            self._bind_arguments()
 
     def with_arguments(self, *args, **kwargs):
         asset = DataAsset(
@@ -117,14 +122,14 @@ class DataAsset:
             )
 
         self.path = resolved_path
-        self.name = resolved_name
+        self.name = self._sanitize_name(resolved_name)
         self.artifacts_dir = resolved_artifacts_dir
 
         def _handle_unknown_types(data):
             if isinstance(data, DataAsset):
                 return {"name": self.name, "fn": self._fn}
 
-        # Recalculate the ids incase the parameters have changed
+        # Recalculate the ids in case the parameters have changed
         self.id = self.asset_run.asset_id = self._generate_asset_guid()
         self.asset_run.id = self._generate_asset_iteration_guid()
         self.asset_run.asset_path = self.path
@@ -134,12 +139,20 @@ class DataAsset:
         return self
 
     async def __call__(self, *args, **kwargs):
-        if not self._bound_arguments:
-            # For now, if there are no bound arguments, then we will create a new instance of a DataAsset
-            # which will prevent collision with same referenced assets with different parameters
-            # called directly through DataAsset(args, kwargs)
+        if args or kwargs:
+            # If arguments are passed in, create a new instance with bound arguments
             asset_with_arguments = self.with_arguments(*args, **kwargs)
             return await asset_with_arguments()
+        else:
+            # No arguments passed in
+            if not self._bound_arguments:
+                # If the function expects no parameters, bind empty arguments
+                if not self._fn_signature.parameters:
+                    self._bind_arguments()
+                else:
+                    raise TypeError(
+                        f"{self.name}() missing required positional arguments"
+                    )
 
         assert self._bound_arguments
         result_artifact = self._create_result_artifact()
@@ -179,7 +192,18 @@ class DataAsset:
             self.artifact_filetype,
             read_json_options=self.read_json_options,
         )
-        result_artifact.data = await collector.collect()
+
+        # Collect the artifacts yielded from the materialization fn
+        collector_artifacts = await collector.collect()
+
+        # Query each of the artifacts [filepath1, filepath2, etc] with duckdb
+        artifact_query = DataArtifactQuery(
+            artifacts=collector_artifacts,
+            read_json_options=self.read_json_options,
+        )
+
+        # The result is all the artifacts unioned
+        result_artifact.data = await artifact_query.query()
 
         # Persist the result artifact to storage, fully materialize it
         await result_artifact.persist()
@@ -236,6 +260,10 @@ class DataAsset:
 
         input_str = input_str.format(**self._bound_arguments.arguments)
         return input_str
+
+    def _sanitize_name(self, name: str) -> str:
+        # Replace any character that's not alphanumeric, underscore, or hyphen with an underscore
+        return re.sub(r"[^A-Za-z0-9_\-]", "_", name)
 
     def _generate_asset_guid(self):
         hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self._bound_arguments.arguments) if self._bound_arguments else ''}"

@@ -4,7 +4,7 @@ from typing import Callable, Literal
 
 from mad_prefect.data_assets.options import ReadJsonOptions
 
-ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", ".asset_metadata")
+ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", "_asset_metadata")
 ARTIFACT_FILE_TYPES = Literal["parquet", "json"]
 
 

@@ -7,11 +7,11 @@ import json
 
 # Override the environment variable before importing register_mad_filesystem
 mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"
-from mad_prefect.duckdb import register_mad_filesystem, register_mad_protocol
+from mad_prefect.duckdb import register_mad_protocol
 
 
-def test_mad_filesystem_queries_file():
-    register_mad_filesystem()
+async def test_mad_filesystem_queries_file():
+    await register_mad_protocol()
 
     # Execute the SQL query to select all data from the specified file
     test = duckdb.sql("SELECT * FROM 'mad://sample1.parquet'")
@@ -34,8 +34,8 @@ def test_mad_filesystem_queries_file():
     print("Count of column0:", count_value)
 
 
-def test_overwriting_existing_file():
-    register_mad_filesystem()
+async def test_overwriting_existing_file():
+    await register_mad_protocol()
 
     sample1 = duckdb.query("SELECT * FROM 'mad://sample1.parquet'")
 

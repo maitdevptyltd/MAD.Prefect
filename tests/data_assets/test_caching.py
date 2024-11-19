@@ -69,7 +69,7 @@ async def test_outside_cache_expiration():
     @asset(
         "caching/outside_cache_expiration.parquet",
         name="outside_cache",
-        cache_expiration=timedelta(minutes=1),
+        cache_expiration=timedelta(seconds=1),
     )
     async def test_asset():
         return await get_api("organisations", {"limit": 3})
@@ -81,7 +81,7 @@ async def test_outside_cache_expiration():
     # As data is materialized should output DuckDBPyRelation
     assert isinstance(first_run_artifact.data, duckdb.DuckDBPyRelation)
 
-    await asyncio.sleep(80)
+    await asyncio.sleep(2)
 
     second_run = test_asset.with_arguments()
     second_run_artifact = await second_run()

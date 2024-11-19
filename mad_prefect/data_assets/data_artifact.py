@@ -42,16 +42,43 @@ class DataArtifact:
             return False
 
         await register_mad_protocol()
-        duckdb.query("SET temp_directory = './.tmp/duckdb/'")
 
-        if self.filetype == "json":
-            await self._persist_json()
-        elif self.filetype == "parquet":
-            await self._persist_parquet()
+        # preserve_insertion_order to improve memory usage.
+        # https://duckdb.org/docs/guides/performance/how_to_tune_workloads.html#the-preserve_insertion_order-option
+        # duckdb.query("SET preserve_insertion_order = false;")
+
+        if isinstance(self.data, duckdb.DuckDBPyRelation):
+            # There is a bug with fsspec and duckdb see test: test_overwriting_existing_file
+            # to work around the bug, instead of setting (use_tmp_file 0) in the query, we will directly reference
+            # the wrapped filesystem
+            fs = await get_fs()
+            protocol = (
+                fs._fs.protocol
+                if isinstance(fs._fs.protocol, str)
+                else fs._fs.protocol[0]
+            )
+
+            # Ensure the directory for the path exists
+            fs.mkdirs(os.path.dirname(self.path), exist_ok=True)
+
+            path = fs._resolve_path(self.path)
+            d = self.data
+
+            duckdb.register_filesystem(cast(str, fs._fs))
+            duckdb.execute(f"COPY d TO '{protocol}://{path}'")
         else:
-            raise ValueError(f"Unsupported file format {self.filetype}")
+            if self.filetype == "json":
+                await self._persist_json()
+            elif self.filetype == "parquet":
+                await self._persist_parquet()
+            else:
+                raise ValueError(f"Unsupported file format {self.filetype}")
 
         self.persisted = await self.exists()
+
+        # Release the reference to data to free up memory
+        self.data = None
+
         return self.persisted
 
     async def _open(self):
@@ -99,6 +126,8 @@ class DataArtifact:
 
             if file:
                 file.close()
+
+            await entities.aclose()
 
     async def _persist_parquet(self):
         def __sanitize_data(data):
@@ -162,6 +191,8 @@ class DataArtifact:
             if file:
                 file.close()
 
+            await entities.aclose()
+
     async def _yield_entities_to_persist(self):
         from mad_prefect.data_assets.data_asset import DataAsset
 
@@ -185,13 +216,16 @@ class DataArtifact:
                 # Convert duckdb into batches of arrow tables
                 reader = batch_data.fetch_arrow_reader(1000)
 
-                while True:
-                    try:
-                        # this will yield a pyarrow RecordBatch
-                        batch = reader.read_next_batch()
-                        yield batch
-                    except StopIteration as stop:
-                        break
+                try:
+                    while True:
+                        try:
+                            # this will yield a pyarrow RecordBatch
+                            batch = reader.read_next_batch()
+                            yield batch
+                        except StopIteration as stop:
+                            break
+                finally:
+                    reader.close()
 
             elif isinstance(batch_data, httpx.Response):
                 yield batch_data.json()
@@ -206,7 +240,8 @@ class DataArtifact:
 
     async def exists(self):
         fs = await get_fs()
-        return fs.exists(self.path)
+        self.persisted = fs.exists(self.path)
+        return self.persisted
 
     def _truthy(self, data):
         if isinstance(data, pd.DataFrame):
