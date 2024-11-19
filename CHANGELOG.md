@@ -1,3 +1,27 @@
+## 2.0.0 (2024-11-19)
+
+### BREAKING CHANGE
+
+- All data assets that utilize `DataArtifactCollector` for yielding HTTPX requests will no longer include URL parameters in their hive partitioning. Developers must revise their path creation logic to align with the new artifact path generation method. Refer to the updated `_build_artifact_path` method for guidance on constructing artifact paths without HTTPX URL parameters.
+
+### Fix
+
+- disable preserve insertion order false
+- yielded cached data assets should be marked as persisted
+- close async iterators when after serializing results
+- release resources when artifacts have finished processing, improve memory usage
+- ensure directory is created before running duckdb copy
+- santize asset names so they are alphanumeric only
+- data assets which don't have parameters, should not create a new instance with bound arguments every time it runs
+
+### Refactor
+
+- disable preserve_insertion_order in duckdb query
+- prefix asset_metadata with _ instead of .
+- leverage duckdb to write to storage when the data artifact data object is a duckdb pyrelation
+- decouple artifact collector and artifact query
+- remove HTTPX URL parameters from hive partitioning in DataArtifactCollector
+
 ## 1.3.0 (2024-10-24)
 
 ### Feat
