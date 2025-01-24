@@ -420,4 +420,42 @@ async def test_materialize_artifact_csv():
     assert count_query_result[0] == 4
 
 
+async def test_csv_artifacts_with_hive_partitions():
+    @asset(
+        path="test_csv_artifacts_with_hive_partitions.csv",
+        artifact_filetype="csv",
+        artifacts_dir="raw/month=12/year=2024",
+    )
+    async def csv_asset():
+        # Yield first batch
+        yield [
+            {"count": 1, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 5, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+        # Yield second batch
+        yield [
+            {"count": 10, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 15, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
 
+        # Materialize the CSV file
+
+    csv_artifact = await csv_asset()
+    assert csv_artifact
+
+    # Use the artifact's query method to count rows (DuckDB can handle CSV)
+    count_csv_artifact_query = await csv_artifact.query("SELECT COUNT(*) c")
+    assert count_csv_artifact_query
+
+    count_query_result = count_csv_artifact_query.fetchone()
+    assert count_query_result
+
+    # We expect 4 total rows from the two yields above
+    assert count_query_result[0] == 4
+
+    csv_artifact_query = await csv_artifact.query()
+
+    csv_columns = csv_artifact_query.columns if csv_artifact_query else []
+
+    assert "year" in csv_columns
+    assert "month" in csv_columns

@@ -137,21 +137,20 @@ class DataArtifactQuery:
 
         # Build the base options dict without 'columns'
         base_options = self.read_csv_options.model_dump(
-            exclude={"columns"},
             exclude_none=True,
         )
 
-        raise ValueError("INCOMPLETE FUNCTION: FINISH BEFORE COMMITTING")
-
         options_str = self._format_options_dict(base_options)
 
-        # Build a query that selects all from the CSV data
-        artifact_base_query = (
+        # Build the base query string without 'columns'
+        base_query = (
             f"SELECT * FROM read_csv({globs_formatted}, {options_str})"
+            if options_str
+            else f"SELECT * FROM read_csv({globs_formatted})"
         )
 
-        # Execute the query and return the DuckDB result
-        artifact_query = duckdb.query(artifact_base_query)
+        # Execute the query
+        artifact_query = duckdb.query(base_query)
         return artifact_query
 
     def _format_options_dict(self, options_dict: dict) -> str:
