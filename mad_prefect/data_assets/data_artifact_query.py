@@ -1,7 +1,7 @@
 from typing import cast
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
-from mad_prefect.data_assets.options import ReadJsonOptions
+from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.data_assets.data_artifact import DataArtifact
 
@@ -12,9 +12,11 @@ class DataArtifactQuery:
         self,
         artifacts: list[DataArtifact] | None = None,
         read_json_options: ReadJsonOptions | None = None,
+        read_csv_options: ReadCSVOptions | None = None,
     ):
         self.artifacts = artifacts or []
         self.read_json_options = read_json_options or ReadJsonOptions()
+        self.read_csv_options = read_csv_options or ReadCSVOptions()
 
     async def query(self, query_str: str | None = None):
         await register_mad_protocol()
@@ -39,6 +41,8 @@ class DataArtifactQuery:
             artifact_query = self._create_query_json(globs)
         elif filetype == "parquet":
             artifact_query = self._create_query_parquet(globs)
+        elif filetype == "csv":
+            artifact_query = self._create_query_csv(globs)
         else:
             raise ValueError(f"Unsupported file format {filetype}")
 
@@ -124,6 +128,29 @@ class DataArtifactQuery:
 
         # Execute the query
         artifact_query = duckdb.query(artifact_base_query)
+        return artifact_query
+
+    def _create_query_csv(self, globs: list[str]):
+        # Convert each artifact path to a DuckDB-friendly string
+        globs_str = ", ".join(f"'{g}'" for g in globs)
+        globs_formatted = f"[{globs_str}]"
+
+        # Build the base options dict without 'columns'
+        base_options = self.read_csv_options.model_dump(
+            exclude_none=True,
+        )
+
+        options_str = self._format_options_dict(base_options)
+
+        # Build the base query string without 'columns'
+        base_query = (
+            f"SELECT * FROM read_csv({globs_formatted}, {options_str})"
+            if options_str
+            else f"SELECT * FROM read_csv({globs_formatted})"
+        )
+
+        # Execute the query
+        artifact_query = duckdb.query(base_query)
         return artifact_query
 
     def _format_options_dict(self, options_dict: dict) -> str:
