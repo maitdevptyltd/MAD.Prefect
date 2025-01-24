@@ -11,7 +11,7 @@ from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
-from mad_prefect.data_assets.options import ReadJsonOptions
+from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import os
@@ -27,6 +27,7 @@ class DataAsset:
         snapshot_artifacts: bool = False,
         artifact_filetype: ARTIFACT_FILE_TYPES = "json",
         read_json_options: ReadJsonOptions | None = None,
+        read_csv_options: ReadCSVOptions | None = None,
         cache_expiration: timedelta | None = None,
     ):
         self._fn: Callable = fn
@@ -49,6 +50,7 @@ class DataAsset:
         self.asset_run.asset_path = self.path
 
         self.read_json_options = read_json_options or ReadJsonOptions()
+        self.read_csv_options = read_csv_options or ReadCSVOptions()
 
         # If the function has no parameters, bind empty arguments immediately
         if not self._fn_signature.parameters:
@@ -63,6 +65,7 @@ class DataAsset:
             self.snapshot_artifacts,
             self.artifact_filetype,
             self.read_json_options,
+            self.read_csv_options,
             self.cache_expiration,
         )
 
@@ -77,6 +80,7 @@ class DataAsset:
         snapshot_artifacts: bool | None = None,
         artifact_filetype: ARTIFACT_FILE_TYPES | None = None,
         read_json_options: ReadJsonOptions | None = None,
+        read_csv_options: ReadCSVOptions | None = None,
         cache_expiration: timedelta | None = None,
     ):
         # Default to the current asset's options for any None values
@@ -88,6 +92,7 @@ class DataAsset:
             snapshot_artifacts=snapshot_artifacts or self.snapshot_artifacts,
             artifact_filetype=artifact_filetype or self.artifact_filetype,
             read_json_options=read_json_options or self.read_json_options,
+            read_csv_options=read_csv_options or self.read_csv_options,
             cache_expiration=cache_expiration or self.cache_expiration,
         )
 
@@ -191,6 +196,7 @@ class DataAsset:
             base_artifact_path,
             self.artifact_filetype,
             read_json_options=self.read_json_options,
+            read_csv_options=self.read_csv_options,
         )
 
         # Collect the artifacts yielded from the materialization fn
@@ -200,6 +206,7 @@ class DataAsset:
         artifact_query = DataArtifactQuery(
             artifacts=collector_artifacts,
             read_json_options=self.read_json_options,
+            read_csv_options=self.read_csv_options,
         )
 
         # The result is all the artifacts unioned
@@ -222,7 +229,11 @@ class DataAsset:
         return result_artifact
 
     def _create_result_artifact(self):
-        return DataArtifact(self.path, read_json_options=self.read_json_options)
+        return DataArtifact(
+            self.path,
+            read_json_options=self.read_json_options,
+            read_csv_options=self.read_csv_options,
+        )
 
     async def query(self, query_str: str | None = None):
         result_artifact = await self()

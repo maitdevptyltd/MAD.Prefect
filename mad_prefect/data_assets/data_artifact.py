@@ -6,12 +6,13 @@ import httpx
 import jsonlines
 import pandas as pd
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
-from mad_prefect.data_assets.options import ReadJsonOptions
+from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pyarrow.csv as pacsv
 from mad_prefect.json.mad_json_encoder import MADJSONEncoder
 
 
@@ -21,16 +22,18 @@ class DataArtifact:
         path: str,
         data: object | None = None,
         read_json_options: ReadJsonOptions | None = None,
+        read_csv_options: ReadCSVOptions | None = None,
     ):
         self.path = path
         filetype = os.path.splitext(self.path)[1].lstrip(".")
 
-        if filetype not in ["json", "parquet"]:
+        if filetype not in ["json", "parquet", "csv"]:
             raise ValueError(f"Unsupported file type: {filetype}")
 
         self.filetype: ARTIFACT_FILE_TYPES = cast(ARTIFACT_FILE_TYPES, filetype)
         self.data = data
         self.read_json_options = read_json_options or ReadJsonOptions()
+        self.read_csv_options = read_csv_options or ReadCSVOptions()
         self.persisted = False
 
     async def persist(self):
@@ -71,6 +74,8 @@ class DataArtifact:
                 await self._persist_json()
             elif self.filetype == "parquet":
                 await self._persist_parquet()
+            elif self.filetype == "csv":
+                await self._persist_csv()
             else:
                 raise ValueError(f"Unsupported file format {self.filetype}")
 
@@ -193,6 +198,41 @@ class DataArtifact:
 
             await entities.aclose()
 
+    async def _persist_csv(self):
+        entities = self._yield_entities_to_persist()
+        file: BinaryIO | None = None
+        first_chunk = True  # Track whether we need to write CSV headers
+
+        try:
+            next_entity = await anext(entities)
+
+            while self._truthy(next_entity):
+                # If it's already a pa.Table or pa.RecordBatch, use it.
+                # Otherwise, convert it to a Table from a list-of-dicts or list-of-rows.
+                if not isinstance(next_entity, (pa.Table, pa.RecordBatch)):
+                    next_entity = pa.Table.from_pylist(next_entity)
+
+                # If the file isn't open yet, open it
+                if not file:
+                    file = await self._open()
+
+                # Write the current batch to CSV
+                pacsv.write_csv(
+                    next_entity,
+                    file,
+                    write_options=pacsv.WriteOptions(include_header=first_chunk),
+                )
+                first_chunk = False
+
+                next_entity = await anext(entities)
+
+        except StopAsyncIteration:
+            pass
+        finally:
+            if file:
+                file.close()
+            await entities.aclose()
+
     async def _yield_entities_to_persist(self):
         from mad_prefect.data_assets.data_asset import DataAsset
 
@@ -235,7 +275,9 @@ class DataArtifact:
     async def query(self, query_str: str | None = None):
         from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 
-        artifact_query = DataArtifactQuery([self], self.read_json_options)
+        artifact_query = DataArtifactQuery(
+            [self], self.read_json_options, self.read_csv_options
+        )
         return await artifact_query.query(query_str)
 
     async def exists(self):
