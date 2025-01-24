@@ -389,3 +389,35 @@ async def test_json_artifacts_with_different_timestamp_precisions_are_deserializ
         datetime(2023, 1, 2, 12, 0, 0, 55),
         datetime(2023, 1, 3, 12, 0, 0, 33),
     ]
+
+
+async def test_materialize_artifact_csv():
+    @asset("test_csv_asset.csv")
+    async def csv_asset():
+        # Yield first batch
+        yield [
+            {"count": 1, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 5, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+        # Yield second batch
+        yield [
+            {"count": 10, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 15, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+
+    # Materialize the CSV file
+    csv_artifact = await csv_asset()
+    assert csv_artifact
+
+    # Use the artifact's query method to count rows (DuckDB can handle CSV)
+    csv_artifact_query = await csv_artifact.query("SELECT COUNT(*) c")
+    assert csv_artifact_query
+
+    count_query_result = csv_artifact_query.fetchone()
+    assert count_query_result
+
+    # We expect 4 total rows from the two yields above
+    assert count_query_result[0] == 4
+
+
+
