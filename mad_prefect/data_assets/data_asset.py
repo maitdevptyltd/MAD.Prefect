@@ -3,7 +3,7 @@ import hashlib
 import inspect
 import json
 import re
-from typing import Callable
+from typing import Callable, List
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets import ASSET_METADATA_LOCATION
@@ -51,6 +51,9 @@ class DataAsset:
 
         self.read_json_options = read_json_options or ReadJsonOptions()
         self.read_csv_options = read_csv_options or ReadCSVOptions()
+
+        # Extract and set filetypes for result artifacts
+        self.result_artifact_filetypes = self.get_result_artifact_filetypes()
 
         # If the function has no parameters, bind empty arguments immediately
         if not self._fn_signature.parameters:
@@ -160,18 +163,20 @@ class DataAsset:
                     )
 
         assert self._bound_arguments
-        result_artifact = self._create_result_artifact()
+
+        # There may be multiple result artifacts if following syntax is used "bronze/customers.parquet|csv"
+        self.result_artifacts = self._create_result_artifacts()
 
         # Prevent asset from being rematerialized inside a single session
         if self.asset_run and (materialized := self.asset_run.materialized):
-            return result_artifact
+            return self.result_artifacts[0]
 
         self.asset_run.runtime = datetime.now(UTC)
         self.last_materialized = await self._get_last_materialized()
 
         # If data has been materialized within cache_expiration period return empty result_artifact
-        if await self._cached_result(result_artifact, self.asset_run.runtime):
-            return result_artifact
+        if await self._cached_result(self.result_artifacts[0], self.asset_run.runtime):
+            return self.result_artifacts[0]
 
         # Regenerate asset_run_id as runtime has now been set.
         self.asset_run.id = self._generate_asset_iteration_guid()
@@ -210,10 +215,16 @@ class DataAsset:
         )
 
         # The result is all the artifacts unioned
-        result_artifact.data = await artifact_query.query()
+        result_artifact_data = await artifact_query.query()
 
-        # Persist the result artifact to storage, fully materialize it
-        await result_artifact.persist()
+        for result_artifact in self.result_artifacts:
+            result_artifact.data = result_artifact_data
+
+            # Persist the result artifact to storage, fully materialize it
+            await result_artifact.persist()
+
+        # Release reference to data
+        result_artifact_data = None
 
         # Record information about the run
         self.asset_run.materialized = datetime.now(UTC)
@@ -226,14 +237,21 @@ class DataAsset:
             f"Completed operations for asset_run_id: {self.asset_run.id}, on asset_id: {self.id}, on asset: {self.name}"
         )
 
-        return result_artifact
+        return self.result_artifacts[0]
 
-    def _create_result_artifact(self):
-        return DataArtifact(
-            self.path,
-            read_json_options=self.read_json_options,
-            read_csv_options=self.read_csv_options,
-        )
+    def _create_result_artifacts(self) -> List[DataArtifact]:
+        base_path = self.path.split(".")[0]
+        result_artifacts = []
+        for filetype in self.result_artifact_filetypes:
+            result_artifacts.append(
+                DataArtifact(
+                    f"{base_path}.{filetype}",
+                    read_json_options=self.read_json_options,
+                    read_csv_options=self.read_csv_options,
+                )
+            )
+
+        return result_artifacts
 
     async def query(self, query_str: str | None = None):
         result_artifact = await self()
@@ -322,3 +340,7 @@ class DataAsset:
                 f"Retrieving cached result_artifact for asset_id: {self.id} | asset: {self.name}"
             )
             return True
+
+    def get_result_artifact_filetypes(self) -> List[str]:
+        filetypes_part = self.path.split(".")[-1]
+        return filetypes_part.split("|")
