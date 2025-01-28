@@ -89,6 +89,7 @@ def asset(
     snapshot_artifacts: bool = False,
     artifact_filetype: ARTIFACT_FILE_TYPES = "json",
     read_json_options: ReadJsonOptions | None = None,
+    read_csv_options: ReadCSVOptions | None = None,
     cache_expiration: datetime.timedelta | None = None,
 ):
     ...
@@ -99,11 +100,14 @@ The `asset` decorator is used to define a data asset within a Prefect flow. It w
 **Parameters:**
 
 - `path` (str): The path where the final result artifact will be stored.
+    - Supports multiple file types using a |-delimited syntax 
+    - e.g. "path/to/file.parquet|csv" will produce two result artifacts at "path/to/file.parquet" and "path/to/file.csv"
 - `artifacts_dir` (str, optional): The directory where intermediate artifacts will be stored.
 - `name` (str, optional): The name of the data asset. If not provided, defaults to the function name.
 - `snapshot_artifacts` (bool, optional): Whether to snapshot artifacts over time.
-- `artifact_filetype` (Literal["parquet", "json"], optional): The file type for artifacts.
+- `artifact_filetype` (Literal["parquet", "json", "csv"], optional): The file type for intermediate artifacts.
 - `read_json_options` (ReadJsonOptions, optional): Options for reading JSON data.
+- `read_csv_options` (ReadCSVOptions, optional): Options for reading comma separated values data.
 - `cache_expiration` (datetime.timedelta, optional): The cache expiration time. If data has been materialized within this period, it will be reused.
 
 **Usage:**
@@ -132,6 +136,7 @@ class DataAsset:
         snapshot_artifacts: bool = False,
         artifact_filetype: ARTIFACT_FILE_TYPES = "json",
         read_json_options: ReadJsonOptions | None = None,
+        read_csv_options: ReadCSVOptions | None = None,
         cache_expiration: timedelta | None = None,
     ):
         ...
@@ -150,7 +155,7 @@ The `DataAsset` class represents a data asset in the system. It manages the exec
 
 - `name`: The name of the data asset.
 - `path`: The path where the final result artifact is stored.
-- `artifact_filetype`: The file type for artifacts (e.g., "json", "parquet").
+- `artifact_filetype`: The file type for artifacts (e.g., "json", "parquet", "csv").
 
 ---
 
@@ -165,6 +170,7 @@ class DataArtifact:
         path: str,
         data: object | None = None,
         read_json_options: ReadJsonOptions | None = None,
+        read_csv_options: ReadCSVOptions | None = None,
     ):
         ...
 ```
@@ -196,6 +202,7 @@ class DataArtifactCollector:
         filetype: ARTIFACT_FILE_TYPES = "json",
         artifacts: list[DataArtifact] | None = None,
         read_json_options: ReadJsonOptions | None = None,
+        read_csv_options: ReadCSVOptions | None = None,
     ):
         ...
 ```
@@ -218,6 +225,7 @@ class DataArtifactQuery:
         self,
         artifacts: list[DataArtifact] | None = None,
         read_json_options: ReadJsonOptions | None = None,
+        read_csv_options: ReadCSVOptions | None = None,
     ):
         ...
 ```
@@ -425,7 +433,7 @@ export FILESYSTEM_BLOCK_NAME="my_s3_block"
 
 Developers can extend the functionality of `mad_prefect` by:
 
-- **Adding Support for Additional File Types:** Extend `DataArtifact` and `DataArtifactQuery` to handle more file formats (e.g., CSV, Avro).
+- **Adding Support for Additional File Types:** Extend `DataArtifact` and `DataArtifactQuery` to handle more file formats (e.g., Avro).
 - **Custom Persistence Strategies:** Implement new methods in `DataArtifact` for persisting data using different storage mechanisms.
 - **Enhanced Filesystem Features:** Extend `FsspecFileSystem` with additional methods or support for more complex storage options.
 - **Integrate with Other Databases:** Adapt the querying capabilities to work with databases other than DuckDB if needed.
