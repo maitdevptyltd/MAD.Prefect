@@ -167,19 +167,16 @@ class DataAsset:
         # There may be multiple result artifacts if following syntax is used "bronze/customers.parquet|csv"
         self.result_artifacts = self._create_result_artifacts()
 
-        # primary_result_artifact will always be the first listed filetype
-        primary_result_artifact = self.result_artifacts[0]
-
         # Prevent asset from being rematerialized inside a single session
         if self.asset_run and (materialized := self.asset_run.materialized):
-            return primary_result_artifact
+            return self.result_artifacts[0]
 
         self.asset_run.runtime = datetime.now(UTC)
         self.last_materialized = await self._get_last_materialized()
 
         # If data has been materialized within cache_expiration period return empty result_artifact
-        if await self._cached_result(primary_result_artifact, self.asset_run.runtime):
-            return primary_result_artifact
+        if await self._cached_result(self.result_artifacts[0], self.asset_run.runtime):
+            return self.result_artifacts[0]
 
         # Regenerate asset_run_id as runtime has now been set.
         self.asset_run.id = self._generate_asset_iteration_guid()
@@ -229,9 +226,6 @@ class DataAsset:
         # Release reference to data
         result_artifact_data = None
 
-        # Reset primary_result_artifact after data assignment
-        primary_result_artifact = self.result_artifacts[0]
-
         # Record information about the run
         self.asset_run.materialized = datetime.now(UTC)
         duration = self.asset_run.materialized - self.asset_run.runtime
@@ -243,7 +237,7 @@ class DataAsset:
             f"Completed operations for asset_run_id: {self.asset_run.id}, on asset_id: {self.id}, on asset: {self.name}"
         )
 
-        return primary_result_artifact
+        return self.result_artifacts[0]
 
     def _create_result_artifacts(self) -> List[DataArtifact]:
         base_path = self.path.split(".")[0]
