@@ -1,3 +1,10 @@
+## 2.1.0 (2025-01-30)
+
+### Feat
+
+- add multiple result artifact filetype functionality
+- add csv functionality
+
 ## 2.0.0 (2024-11-19)
 
 ### BREAKING CHANGE
