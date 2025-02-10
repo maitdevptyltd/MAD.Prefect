@@ -7,7 +7,7 @@ from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_asset import DataAsset
 from datetime import datetime, date
 import pandas as pd
-
+from pydantic import BaseModel
 from mad_prefect.data_assets.options import ReadJsonOptions
 
 
@@ -492,3 +492,21 @@ async def test_multiple_result_artifacts():
 
     count_result = primary_query.fetchone()
     assert count_result[0] == 2
+
+
+async def test_filetype_resolution():
+    class Asset(BaseModel):
+        path: str
+
+    @asset(path="{asset.path}")
+    async def path_resolution_asset(asset: Asset):
+        return [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25},
+        ]
+
+    path_asset_class_obj = Asset(path="path_resolution_asset.parquet|csv")
+
+    path_asset = path_resolution_asset.with_arguments(path_asset_class_obj)
+
+    return await path_asset()
