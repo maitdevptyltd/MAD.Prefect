@@ -449,6 +449,10 @@ async def test_nested_assets_fetchmany():
 
         id_query = await listing_asset.query(f"SELECT DISTINCT {id_column}")
 
+        # Call execute to resolve the id_query into a DuckDbPyConnection (which is a cursor)
+        # as the id_query is a DuckDbPyRelation which doesn't behave like a cursor
+        qry = id_query.execute()
+
         if id_query is None:
             raise ValueError("fetchmany_id_list_asset is not generated properly.")
 
@@ -460,13 +464,12 @@ async def test_nested_assets_fetchmany():
         results = []
 
         while True:
-            async_tasks = [
-                basic_async_func(row[0]) for row in id_query.fetchmany(BATCH_SIZE)
-            ]
+            b = qry.fetchmany(BATCH_SIZE)
 
-            if not async_tasks:
+            if not b:
                 break
 
+            async_tasks = [basic_async_func(row[0]) for row in b]
             batch_results = await asyncio.gather(*async_tasks, return_exceptions=True)
 
             results.extend(batch_results)
@@ -524,6 +527,7 @@ async def test_listing_asset_fetchmany():
 
     async def fetchmany_function(base_asset: DataAsset):
         query = await base_asset.query("SELECT id")
+        base_asset_name = base_asset._bound_arguments.arguments["endpoint"]
 
         if not query:
             return
@@ -537,7 +541,7 @@ async def test_listing_asset_fetchmany():
 
         while True:
             async_tasks = [
-                basic_async_func(str(row[0]), base_asset.name)
+                basic_async_func(str(row[0]), base_asset_name)
                 for row in query.fetchmany(BATCH_SIZE)
             ]
 
@@ -550,16 +554,13 @@ async def test_listing_asset_fetchmany():
 
         fs = await get_fs()
 
-        await fs.write_data(f"non_asset_fetchmany_{base_asset.name}.json", results)
+        await fs.write_data(f"non_asset_fetchmany_{base_asset_name}.json", results)
 
     beavers = base_asset.with_arguments("beavers")
     peacocks = base_asset.with_arguments("peacocks")
 
-    await asyncio.gather(
-        fetchmany_function(beavers),
-        fetchmany_function(peacocks),
-        return_exceptions=True,
-    )
+    await fetchmany_function(beavers)
+    await fetchmany_function(peacocks)
 
     fs = await get_fs()
 
@@ -579,7 +580,7 @@ async def test_details_asset_fetchmany():
             results.append(record)
 
         fs = await get_fs()
-        await fs.write_data(f"non_asset_fetchmany_base_{endpoint}", results)
+        await fs.write_data(f"non_asset_fetchmany_base_{endpoint}.parquet", results)
 
     @asset(path="details_fetchmany_asset.parquet")
     async def fetchmany_function(endpoint: str):
@@ -614,16 +615,13 @@ async def test_details_asset_fetchmany():
         return results
 
     await write_base_data("beavers")
-    await write_base_data("peacockes")
+    await write_base_data("peacocks")
 
     beavers_details = fetchmany_function.with_arguments("beavers")
     peacocks_details = fetchmany_function.with_arguments("peacocks")
 
-    await asyncio.gather(
-        beavers_details(),
-        peacocks_details(),
-        return_exceptions=True,
-    )
+    await beavers_details()
+    await peacocks_details()
 
     # Test the details assets for row count
     beavers_details_count_query = await beavers_details.query("SELECT COUNT(*)")
@@ -637,6 +635,7 @@ async def test_details_asset_fetchmany():
 
     assert beavers_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
     assert peacocks_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
+
 
 async def test_materialize_artifact_csv():
     @asset("test_csv_asset.csv")
