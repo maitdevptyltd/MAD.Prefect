@@ -8,6 +8,7 @@ from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_asset import DataAsset
 from datetime import datetime, date
 import pandas as pd
+from pydantic import BaseModel
 from mad_prefect.data_assets.options import ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
@@ -636,3 +637,123 @@ async def test_details_asset_fetchmany():
 
     assert beavers_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
     assert peacocks_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
+
+async def test_materialize_artifact_csv():
+    @asset("test_csv_asset.csv")
+    async def csv_asset():
+        # Yield first batch
+        yield [
+            {"count": 1, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 5, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+        # Yield second batch
+        yield [
+            {"count": 10, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 15, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+
+    # Materialize the CSV file
+    csv_artifact = await csv_asset()
+    assert csv_artifact
+
+    # Use the artifact's query method to count rows (DuckDB can handle CSV)
+    csv_artifact_query = await csv_artifact.query("SELECT COUNT(*) c")
+    assert csv_artifact_query
+
+    count_query_result = csv_artifact_query.fetchone()
+    assert count_query_result
+
+    # We expect 4 total rows from the two yields above
+    assert count_query_result[0] == 4
+
+
+async def test_csv_artifacts_with_hive_partitions():
+    @asset(
+        path="test_csv_artifacts_with_hive_partitions.csv",
+        artifact_filetype="csv",
+        artifacts_dir="raw/month=12/year=2024",
+    )
+    async def csv_asset():
+        # Yield first batch
+        yield [
+            {"count": 1, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 5, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+        # Yield second batch
+        yield [
+            {"count": 10, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+            {"count": 15, "id": "951c58e4-b9a4-4478-883e-22760064e416"},
+        ]
+
+        # Materialize the CSV file
+
+    csv_artifact = await csv_asset()
+    assert csv_artifact
+
+    # Use the artifact's query method to count rows (DuckDB can handle CSV)
+    count_csv_artifact_query = await csv_artifact.query("SELECT COUNT(*) c")
+    assert count_csv_artifact_query
+
+    count_query_result = count_csv_artifact_query.fetchone()
+    assert count_query_result
+
+    # We expect 4 total rows from the two yields above
+    assert count_query_result[0] == 4
+
+    csv_artifact_query = await csv_artifact.query()
+
+    csv_columns = csv_artifact_query.columns if csv_artifact_query else []
+
+    assert "year" in csv_columns
+    assert "month" in csv_columns
+
+
+async def test_multiple_result_artifacts():
+    @asset(
+        path="test_multiple_result_artifacts.parquet|csv|json",
+    )
+    async def multi_format_asset():
+        # Yield a single batch of data
+        yield [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25},
+        ]
+
+    # Call the assets
+    primary_result_artifact = await multi_format_asset()
+    assert primary_result_artifact
+
+    # Access the list of result artifacts via the attribute
+    result_artifacts = multi_format_asset.result_artifacts
+    assert result_artifacts
+    assert len(result_artifacts) == 3
+
+    # Directly assert the paths for each artifact
+    assert result_artifacts[0].path == "test_multiple_result_artifacts.parquet"
+    assert result_artifacts[1].path == "test_multiple_result_artifacts.csv"
+    assert result_artifacts[2].path == "test_multiple_result_artifacts.json"
+
+    # Query the primary result artifact
+    primary_query = await primary_result_artifact.query("SELECT COUNT(*) c")
+    assert primary_query
+
+    count_result = primary_query.fetchone()
+    assert count_result[0] == 2
+
+
+async def test_filetype_resolution():
+    class Asset(BaseModel):
+        path: str
+
+    @asset(path="{asset.path}")
+    async def path_resolution_asset(asset: Asset):
+        return [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25},
+        ]
+
+    path_asset_class_obj = Asset(path="path_resolution_asset.parquet|csv")
+
+    path_asset = path_resolution_asset.with_arguments(path_asset_class_obj)
+
+    return await path_asset()
