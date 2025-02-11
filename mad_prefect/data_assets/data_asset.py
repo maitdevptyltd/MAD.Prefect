@@ -15,6 +15,7 @@ from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import os
+import sys
 
 
 class DataAsset:
@@ -34,7 +35,7 @@ class DataAsset:
         self._fn_signature: inspect.Signature = inspect.signature(fn)
         self._bound_arguments: inspect.BoundArguments | None = None
 
-        self.name: str = name if name else fn.__name__
+        self.name: str = name if name else f"{fn.__module__}.{fn.__name__}"
         self.path: str = path
         self.artifacts_dir: str = artifacts_dir
         self.snapshot_artifacts: bool = snapshot_artifacts
@@ -164,6 +165,9 @@ class DataAsset:
 
         assert self._bound_arguments
 
+        # If asset is defined as a global variable add this as suffix to default asset_name
+        self.assign_context_asset_name()
+
         # There may be multiple result artifacts if following syntax is used "bronze/customers.parquet|csv"
         self.result_artifacts = self._create_result_artifacts()
 
@@ -291,8 +295,8 @@ class DataAsset:
         return input_str
 
     def _sanitize_name(self, name: str) -> str:
-        # Replace any character that's not alphanumeric, underscore, or hyphen with an underscore
-        return re.sub(r"[^A-Za-z0-9_\-]", "_", name)
+        # Replace any character that's not alphanumeric or a '.', underscore, or hyphen with an underscore
+        return re.sub(r"[^A-Za-z0-9_.\-]", "_", name)
 
     def _generate_asset_guid(self):
         hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self._bound_arguments.arguments) if self._bound_arguments else ''}"
@@ -344,3 +348,48 @@ class DataAsset:
     def get_result_artifact_filetypes(self) -> List[str]:
         filetypes_part = self.path.split(".")[-1]
         return filetypes_part.split("|")
+
+    def _infer_global_name_from_module(self) -> str | None:
+        """
+        Retrieve the module (from self._fn.__module__) and iterate over its globals.
+        Collect all variable names referencing this DataAsset instance (via comparing asset_run.id).
+        If exactly one match is found, return that variable name; otherwise, return None.
+        """
+        module_name = self._fn.__module__
+        module = sys.modules.get(module_name)
+        if not module:
+            return None
+
+        matches = []
+        for var_name, var_value in module.__dict__.items():
+            if var_name == self._fn.__name__:
+                continue
+            if (
+                isinstance(var_value, DataAsset)
+                and var_value.asset_run.id == self.asset_run.id
+            ):
+                matches.append(var_name)
+        if len(matches) == 1:
+            return matches[0]
+
+        return None
+
+    def assign_context_asset_name(self):
+        # If explicit name is set do not alter
+        if self.name != f"{self._fn.__module__}.{self._fn.__name__}":
+            return
+
+        # Retrieve relevant global_variable names
+        global_name = self._infer_global_name_from_module()
+
+        # If match isn't found make no change
+        if global_name is None:
+            return
+
+        # Add global variable suffix if applicable
+        self.name = f"{self._fn.__module__}.{self._fn.__name__}.{global_name}"
+
+        # Recalculate the ids in case the parameters have changed
+        self.id = self.asset_run.asset_id = self._generate_asset_guid()
+        self.asset_run.id = self._generate_asset_iteration_guid()
+        self.asset_run.asset_name = self.name
