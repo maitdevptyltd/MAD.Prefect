@@ -166,7 +166,7 @@ class DataAsset:
         assert self._bound_arguments
 
         # If asset is defined as a global variable add this as suffix to default asset_name
-        self.assign_context_asset_name()
+        self._assign_context_asset_name()
 
         # There may be multiple result artifacts if following syntax is used "bronze/customers.parquet|csv"
         self.result_artifacts = self._create_result_artifacts()
@@ -374,7 +374,7 @@ class DataAsset:
 
         return None
 
-    def assign_context_asset_name(self):
+    def _assign_context_asset_name(self):
         # If explicit name is set do not alter
         if self.name != f"{self._fn.__module__}.{self._fn.__name__}":
             return
