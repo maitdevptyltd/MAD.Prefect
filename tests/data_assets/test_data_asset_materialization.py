@@ -539,10 +539,3 @@ async def test_nested_function_asset_name():
 
     assert asset_1.name == "tests.mad_data_test.dw.nested_assets.nested_asset_1"
     assert asset_2.name == "tests.mad_data_test.dw.nested_assets.nested_asset_2"
-
-    # async_func = nested_assets()
-
-    # results = await async_func()
-
-    # asset_1 = results[0]
-    # asset_2 = results[1]

@@ -21,8 +21,3 @@ def nested_assets_func():
         ]
 
     return nested_asset_1, nested_asset_2
-
-    # async def _materialize():
-    #     asset_1 = await nested_asset_1()
-    #     asset_2 = await nested_asset_2()
-    #     return asset_1, asset_2
