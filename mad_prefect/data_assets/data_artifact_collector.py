@@ -2,6 +2,8 @@ from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.data_assets.data_artifact import DataArtifact
+from pyarrow import Schema as PyArrowSchema
+from pydantic import BaseModel
 
 
 class DataArtifactCollector:
@@ -14,6 +16,7 @@ class DataArtifactCollector:
         artifacts: list[DataArtifact] | None = None,
         read_json_options: ReadJsonOptions | None = None,
         read_csv_options: ReadCSVOptions | None = None,
+        schema: BaseModel | PyArrowSchema | None = None,
     ):
         self.collector = collector
         self.dir = dir
@@ -21,6 +24,7 @@ class DataArtifactCollector:
         self.artifacts = artifacts or []
         self.read_json_options = read_json_options or ReadJsonOptions()
         self.read_csv_options = read_csv_options or ReadCSVOptions()
+        self.schema: BaseModel | PyArrowSchema | None = schema
 
     async def collect(self):
         fragment_num = 0
@@ -33,7 +37,11 @@ class DataArtifactCollector:
             else:
                 path = self._build_artifact_path(self.dir, fragment_number=fragment_num)
                 fragment_artifact = DataArtifact(
-                    path, fragment, self.read_json_options, self.read_csv_options
+                    path,
+                    fragment,
+                    self.read_json_options,
+                    self.read_csv_options,
+                    self.schema,
                 )
 
             if await fragment_artifact.persist():

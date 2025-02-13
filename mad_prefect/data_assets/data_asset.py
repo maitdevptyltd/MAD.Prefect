@@ -15,6 +15,8 @@ from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import os
+from pydantic import BaseModel
+from pyarrow import Schema as PyArrowSchema
 
 
 class DataAsset:
@@ -29,6 +31,7 @@ class DataAsset:
         read_json_options: ReadJsonOptions | None = None,
         read_csv_options: ReadCSVOptions | None = None,
         cache_expiration: timedelta | None = None,
+        schema: BaseModel | PyArrowSchema | None = None,
     ):
         self._fn: Callable = fn
         self._fn_signature: inspect.Signature = inspect.signature(fn)
@@ -41,6 +44,7 @@ class DataAsset:
 
         self.artifact_filetype: ARTIFACT_FILE_TYPES = artifact_filetype
         self.cache_expiration: timedelta = cache_expiration or timedelta(0)
+        self.schema: BaseModel | PyArrowSchema | None = schema
 
         self.id = self._generate_asset_guid()
 
@@ -70,6 +74,7 @@ class DataAsset:
             self.read_json_options,
             self.read_csv_options,
             self.cache_expiration,
+            self.schema,
         )
 
         asset._bind_arguments(*args, **kwargs)
@@ -85,6 +90,7 @@ class DataAsset:
         read_json_options: ReadJsonOptions | None = None,
         read_csv_options: ReadCSVOptions | None = None,
         cache_expiration: timedelta | None = None,
+        schema: BaseModel | PyArrowSchema | None = None,
     ):
         # Default to the current asset's options for any None values
         asset = DataAsset(
@@ -97,6 +103,7 @@ class DataAsset:
             read_json_options=read_json_options or self.read_json_options,
             read_csv_options=read_csv_options or self.read_csv_options,
             cache_expiration=cache_expiration or self.cache_expiration,
+            schema=schema or self.schema,
         )
 
         # Ensure we're also passing through any bound arguments if we have them
@@ -248,6 +255,7 @@ class DataAsset:
                     f"{base_path}.{filetype}",
                     read_json_options=self.read_json_options,
                     read_csv_options=self.read_csv_options,
+                    schema=self.schema,
                 )
             )
 
