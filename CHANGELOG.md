@@ -1,3 +1,9 @@
+## 2.1.1 (2025-02-14)
+
+### Fix
+
+- resolve path templated values before resolving artifact filetypes from path string (#11)
+
 ## 2.1.0 (2025-01-30)
 
 ### Feat
