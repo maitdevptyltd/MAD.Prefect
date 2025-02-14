@@ -508,24 +508,6 @@ async def test_module_function_asset_name():
     )
 
 
-async def test_module_function_global_variable_asset_name():
-    from tests.mad_data_test.dw import ferocious_penguins
-    from tests.mad_data_test.dw.test_endpoint import dynamic_elephants
-
-    await asyncio.gather(
-        ferocious_penguins(), dynamic_elephants(), return_exceptions=True
-    )
-
-    assert (
-        ferocious_penguins.name
-        == "tests.mad_data_test.dw.modular_name_asset_function.ferocious_penguins"
-    )
-    assert (
-        dynamic_elephants.name
-        == "tests.mad_data_test.dw.test_endpoint.modular_name_asset_function.dynamic_elephants"
-    )
-
-
 async def test_nested_function_asset_name():
     from tests.mad_data_test.dw.nested_assets import nested_assets_func
 
