@@ -53,9 +53,6 @@ class DataAsset:
         self.read_json_options = read_json_options or ReadJsonOptions()
         self.read_csv_options = read_csv_options or ReadCSVOptions()
 
-        # Extract and set filetypes for result artifacts
-        self.result_artifact_filetypes = self.get_result_artifact_filetypes()
-
         # If the function has no parameters, bind empty arguments immediately
         if not self._fn_signature.parameters:
             self._bind_arguments()
@@ -164,6 +161,9 @@ class DataAsset:
                     )
 
         assert self._bound_arguments
+
+        # Extract and set filetypes for result artifacts
+        self.result_artifact_filetypes = self.get_result_artifact_filetypes()
 
         # There may be multiple result artifacts if following syntax is used "bronze/customers.parquet|csv"
         self.result_artifacts = self._create_result_artifacts()
