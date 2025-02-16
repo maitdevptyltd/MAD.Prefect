@@ -15,6 +15,7 @@ from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import os
+import sys
 
 
 class DataAsset:
@@ -34,7 +35,7 @@ class DataAsset:
         self._fn_signature: inspect.Signature = inspect.signature(fn)
         self._bound_arguments: inspect.BoundArguments | None = None
 
-        self.name: str = name if name else fn.__name__
+        self.name: str = name if name else f"{fn.__module__}.{fn.__name__}"
         self.path: str = path
         self.artifacts_dir: str = artifacts_dir
         self.snapshot_artifacts: bool = snapshot_artifacts
@@ -291,8 +292,8 @@ class DataAsset:
         return input_str
 
     def _sanitize_name(self, name: str) -> str:
-        # Replace any character that's not alphanumeric, underscore, or hyphen with an underscore
-        return re.sub(r"[^A-Za-z0-9_\-]", "_", name)
+        # Replace any character that's not alphanumeric or a '.', underscore, or hyphen with an underscore
+        return re.sub(r"[^A-Za-z0-9_.\-]", "_", name)
 
     def _generate_asset_guid(self):
         hash_input = f"{self.name}:{self.path}:{self.artifacts_dir}:{str(self._bound_arguments.arguments) if self._bound_arguments else ''}"

@@ -756,3 +756,31 @@ async def test_filetype_resolution():
     path_asset = path_resolution_asset.with_arguments(path_asset_class_obj)
 
     return await path_asset()
+
+
+async def test_module_function_asset_name():
+    from tests.mad_data_test.dw import ferocious_penguins
+    from tests.mad_data_test.dw.test_endpoint import dynamic_elephants
+
+    assert (
+        ferocious_penguins.name == "tests.mad_data_test.dw.modular_name_asset_function"
+    )
+    assert (
+        dynamic_elephants.name
+        == "tests.mad_data_test.dw.test_endpoint.modular_name_asset_function"
+    )
+
+
+async def test_nested_function_asset_name():
+    from tests.mad_data_test.dw.nested_assets import nested_assets_func
+
+    assets = nested_assets_func()
+
+    asset_1 = assets[0]
+    asset_2 = assets[1]
+
+    assert isinstance(asset_1, DataAsset)
+    assert isinstance(asset_2, DataAsset)
+
+    assert asset_1.name == "tests.mad_data_test.dw.nested_assets.nested_asset_1"
+    assert asset_2.name == "tests.mad_data_test.dw.nested_assets.nested_asset_2"
