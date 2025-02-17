@@ -18,8 +18,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pyarrow.csv as pacsv
 from mad_prefect.json.mad_json_encoder import MADJSONEncoder
-from pyarrow import Schema as PyArrowSchema
-from pydantic_to_pyarrow import get_pyarrow_schema
 
 
 class DataArtifact:
@@ -29,7 +27,6 @@ class DataArtifact:
         data: object | None = None,
         read_json_options: ReadJsonOptions | None = None,
         read_csv_options: ReadCSVOptions | None = None,
-        schema: BaseModel | PyArrowSchema | None = None,
     ):
         self.path = path
         filetype = os.path.splitext(self.path)[1].lstrip(".")
@@ -41,7 +38,6 @@ class DataArtifact:
         self.data = data
         self.read_json_options = read_json_options or ReadJsonOptions()
         self.read_csv_options = read_csv_options or ReadCSVOptions()
-        self.schema: BaseModel | PyArrowSchema | None = schema
         self.persisted = False
 
     async def persist(self):
@@ -161,7 +157,6 @@ class DataArtifact:
         entities = self._yield_entities_to_persist()
         file: BinaryIO | None = None
         writer: pq.ParquetWriter | None = None
-        defined_schema: PyArrowSchema | None = self.resolve_schema()
 
         try:
             next_entity = await anext(entities)
@@ -177,8 +172,7 @@ class DataArtifact:
                 # Use the first entity to determine the file's schema
                 if not file or not writer:
                     file = await self._open()
-                    schema = defined_schema if defined_schema else table_or_batch.schema
-                    writer = pq.ParquetWriter(file, schema)
+                    writer = pq.ParquetWriter(file, table_or_batch.schema)
                 else:
                     # If schema has evolved, adjust the current RecordBatch
                     if not table_or_batch.schema.equals(writer.schema):
@@ -278,14 +272,14 @@ class DataArtifact:
                     reader.close()
 
             # If the entity is a pydantic model convert to python objects
-            if (
+            elif (
                 isinstance(batch_data, BaseModel)
                 or isinstance(batch_data, list)
                 and isinstance(batch_data[0], BaseModel)
             ):
                 yield get_python_objects_from_pydantic_model(batch_data)
 
-            if isinstance(batch_data, httpx.Response):
+            elif isinstance(batch_data, httpx.Response):
                 yield batch_data.json()
             else:
                 yield batch_data
@@ -315,13 +309,3 @@ class DataArtifact:
             return False
 
         return True
-
-    def resolve_schema(self):
-        if not self.schema:
-            return None
-
-        return (
-            get_pyarrow_schema(self.schema.__class__)
-            if isinstance(self.schema, BaseModel)
-            else self.schema
-        )

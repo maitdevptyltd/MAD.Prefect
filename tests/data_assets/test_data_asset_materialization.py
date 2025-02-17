@@ -3,6 +3,7 @@ import random
 import string
 from uuid import UUID
 import duckdb
+from pydantic import BaseModel
 from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_asset import DataAsset
 from datetime import datetime, date
@@ -492,3 +493,30 @@ async def test_multiple_result_artifacts():
 
     count_result = primary_query.fetchone()
     assert count_result[0] == 2
+
+
+async def test_pydantic_model_asset():
+    @asset(path="pydantic_model_asset.parquet")
+    async def pydantic_model_asset():
+        class PedanticChild(BaseModel):
+            child_name: str
+            test_score: float
+
+        class PedanticPydanticClass(BaseModel):
+            id: int
+            pendantic_levels: float
+            description: str
+            creation_date: datetime
+            child: PedanticChild
+
+        data = PedanticPydanticClass(
+            id=666999555,
+            pendantic_levels=0.89,
+            description="Very pedantic",
+            creation_date=datetime.now(),
+            child=PedanticChild(child_name="John", test_score=0.6667),
+        )
+
+        return data
+
+    await pydantic_model_asset()
