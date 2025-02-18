@@ -1,3 +1,4 @@
+import asyncio
 from decimal import Decimal
 import random
 import string
@@ -8,8 +9,10 @@ from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_asset import DataAsset
 from datetime import datetime, date
 import pandas as pd
-
+from pydantic import BaseModel
 from mad_prefect.data_assets.options import ReadJsonOptions
+from mad_prefect.duckdb import register_mad_protocol
+from mad_prefect.filesystems import get_fs
 
 
 @asset("simple_asset.parquet")
@@ -392,6 +395,249 @@ async def test_json_artifacts_with_different_timestamp_precisions_are_deserializ
     ]
 
 
+FETCHMANY_SAMPLE_DATA = [
+    {"id": "e2b8033a-59bb-4d47-a761-8b754ed48e2e", "name": "John Smith"},
+    {"id": "606a7a69-476a-488a-a563-ebe728f20f61", "name": "Alice Johnson"},
+    {"id": "91d0ff16-236f-46b2-ba2e-a24d912a2322", "name": "Bob Williams"},
+    {"id": "944c75be-7ff2-4354-bf22-67e3627c2f5e", "name": "Carol Brown"},
+    {"id": "d7919b94-4027-4db9-95ee-69cba672af0e", "name": "Dave Jones"},
+    {"id": "ff6b54d5-7aa3-4455-a541-4ce6dd0385cb", "name": "Emily Miller"},
+    {"id": "bfcc7074-032f-4b1a-9bd2-615adba4098c", "name": "Frank Davis"},
+    {"id": "6e1eaa3c-f033-4375-baf6-c6c9d0ad21ef", "name": "Grace Garcia"},
+    {"id": "b75adee9-e785-4d5f-8f6b-495a9f688e68", "name": "Henry Rodriguez"},
+    {"id": "65136fe2-4983-41c7-992b-1db54f9027fd", "name": "Ivy Wilson"},
+    {"id": "ed0f5c77-713f-47b8-b0ab-33ef3d69fe3c", "name": "Jack Martinez"},
+    {"id": "0b06d36f-dcc9-4d64-a520-5bb15f7ac80a", "name": "Kate Anderson"},
+    {"id": "b7bea19c-9448-4fd8-bec2-9a708f01264d", "name": "Leo Taylor"},
+    {"id": "68388ada-e48b-4ef0-9812-8d0334cdaf22", "name": "Mia Thomas"},
+    {"id": "492ab6ae-2659-48d2-ab0a-c59b67cd9c23", "name": "Nancy Hernandez"},
+    {"id": "dcedf173-a4e6-4c6a-a053-e3cc7fadd0fd", "name": "Oscar Moore"},
+    {"id": "2b32c6c5-9452-48d9-b7b4-d51e3e7c5861", "name": "Paul Martin"},
+    {"id": "88a26168-66aa-456c-a1c2-25adf2d2f6fd", "name": "Queen Jackson"},
+    {"id": "8f3ceb9c-195f-4b3f-9d56-f8beb7e82b84", "name": "Ray Thompson"},
+    {"id": "d94ed1a6-b190-40d7-a336-cc03573e4acf", "name": "Sarah White"},
+    {"id": "d3c25b2f-2a9e-4a9e-b0ec-21ae22c79b3d", "name": "Tom Lopez"},
+    {"id": "fbd099cf-d39c-400f-8b75-99ed5075f23b", "name": "Uma Lee"},
+    {"id": "a4bf19e9-a469-4aa3-b6d1-28303b33bed3", "name": "Violet Gonzalez"},
+    {"id": "709652e2-cf75-4f67-9967-5c6c00858f9b", "name": "Will Harris"},
+    {"id": "ea6c5091-8b77-472f-bbb3-7c79c2814d41", "name": "Xena Clark"},
+    {"id": "c2a753ae-cc24-4ce1-b4d9-7934f1a6aeb7", "name": "Yvonne Lewis"},
+    {"id": "97a578d3-7634-4c1a-818f-3da589e7dcf1", "name": "Zack Robinson"},
+    {"id": "bd7af370-322d-4555-8694-4346bb3db96e", "name": "John Walker"},
+    {"id": "6dd3e3bc-372b-478b-bd49-bc427b6a6dd1", "name": "Jane Perez"},
+    {"id": "49363354-8951-41cb-a903-fde541fdf350", "name": "Alice Hall"},
+]
+
+
+async def test_nested_assets_fetchmany():
+
+    @asset(path="nested_fetchmany_list_asset_{endpoint}.parquet", name="{endpoint}")
+    async def listing_asset(endpoint: str):
+        results = []
+
+        for record in FETCHMANY_SAMPLE_DATA:
+            record["endpoint"] = endpoint
+            results.append(record)
+
+        return results
+
+    # Set up details asset
+    @asset(
+        path="nested_fetchmany_details_{listing_asset.name}.parquet",
+        name="{listing_asset.name}_details",
+    )
+    async def details_asset(listing_asset: DataAsset, id_column: str = "id"):
+
+        id_query = await listing_asset.query(f"SELECT DISTINCT {id_column}")
+
+        # Call execute to resolve the id_query into a DuckDbPyConnection (which is a cursor)
+        # as the id_query is a DuckDbPyRelation which doesn't behave like a cursor
+        qry = id_query.execute()
+
+        if id_query is None:
+            raise ValueError("fetchmany_id_list_asset is not generated properly.")
+
+        BATCH_SIZE = 10
+
+        async def basic_async_func(id: str):
+            return {"id": id}
+
+        results = []
+
+        while True:
+            b = qry.fetchmany(BATCH_SIZE)
+
+            if not b:
+                break
+
+            async_tasks = [basic_async_func(row[0]) for row in b]
+            batch_results = await asyncio.gather(*async_tasks, return_exceptions=True)
+
+            results.extend(batch_results)
+
+        return results
+
+    # Set up listing assets
+    beavers_listing = listing_asset.with_arguments("beavers")
+    peacocks_listing = listing_asset.with_arguments("peacocks")
+
+    # Set up details assets
+    beavers_details = details_asset.with_arguments(beavers_listing)
+    peacocks_details = details_asset.with_arguments(peacocks_listing)
+
+    # Materialize details assets
+    await asyncio.gather(
+        beavers_details(),
+        peacocks_details(),
+        return_exceptions=True,
+    )
+
+    # Test the listing assets for distinct ids
+    beavers_listing_distinct_ids = await beavers_listing.query(
+        "SELECT COUNT(DISTINCT id)"
+    )
+    beavers_listing_distinct_id_count: tuple = beavers_listing_distinct_ids.fetchone()  # type: ignore
+
+    peacocks_listing_distinct_ids = await peacocks_listing.query(
+        "SELECT COUNT(DISTINCT id)"
+    )
+    peacocks_listing_distinct_id_count: tuple = peacocks_listing_distinct_ids.fetchone()  # type: ignore
+
+    assert beavers_listing_distinct_id_count[0] == len(FETCHMANY_SAMPLE_DATA)
+    assert peacocks_listing_distinct_id_count[0] == len(FETCHMANY_SAMPLE_DATA)
+
+    # Test the details assets for row count
+    beavers_details_count_query = await beavers_details.query("SELECT COUNT(*)")
+    beavers_details_count: tuple = beavers_details_count_query.fetchone()  # type: ignore
+
+    peacocks_details_count_query = await peacocks_details.query("SELECT COUNT(*)")
+    peacocks_details_count: tuple = peacocks_details_count_query.fetchone()  # type: ignore
+
+    print(f"beavers: {beavers_details_count[0]}")
+    print(f"peacocks: {peacocks_details_count[0]}")
+
+    assert beavers_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
+    assert peacocks_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
+
+
+async def test_listing_asset_fetchmany():
+
+    @asset(path="listing_asset_fetchmany_{endpoint}.parquet")
+    async def base_asset(endpoint: str):
+        return FETCHMANY_SAMPLE_DATA
+
+    async def fetchmany_function(base_asset: DataAsset):
+        query = await base_asset.query("SELECT id")
+        base_asset_name = base_asset._bound_arguments.arguments["endpoint"]
+
+        if not query:
+            return
+
+        BATCH_SIZE = 10
+
+        async def basic_async_func(id: str, endpoint: str):
+            return {"id": id, "endpoint": endpoint}
+
+        results = []
+
+        while True:
+            async_tasks = [
+                basic_async_func(str(row[0]), base_asset_name)
+                for row in query.fetchmany(BATCH_SIZE)
+            ]
+
+            if not async_tasks:
+                break
+
+            batch_results = await asyncio.gather(*async_tasks, return_exceptions=True)
+
+            results.extend(batch_results)
+
+        fs = await get_fs()
+
+        await fs.write_data(f"non_asset_fetchmany_{base_asset_name}.json", results)
+
+    beavers = base_asset.with_arguments("beavers")
+    peacocks = base_asset.with_arguments("peacocks")
+
+    await fetchmany_function(beavers)
+    await fetchmany_function(peacocks)
+
+    fs = await get_fs()
+
+    beavers_data = await fs.read_data("non_asset_fetchmany_beavers.json")
+    peacocks_data = await fs.read_data("non_asset_fetchmany_peacocks.json")
+
+    assert len(beavers_data) == len(FETCHMANY_SAMPLE_DATA)
+    assert len(peacocks_data) == len(FETCHMANY_SAMPLE_DATA)
+
+
+async def test_details_asset_fetchmany():
+
+    async def write_base_data(endpoint: str):
+        results = []
+        for record in FETCHMANY_SAMPLE_DATA:
+            record["endpoint"] = endpoint
+            results.append(record)
+
+        fs = await get_fs()
+        await fs.write_data(f"non_asset_fetchmany_base_{endpoint}.parquet", results)
+
+    @asset(path="details_fetchmany_asset.parquet")
+    async def fetchmany_function(endpoint: str):
+        await register_mad_protocol()
+        query = duckdb.query(
+            f"SELECT DISTINCT id FROM 'mad://non_asset_fetchmany_base_{endpoint}.parquet'"
+        )
+
+        if not query:
+            return
+
+        BATCH_SIZE = 10
+
+        async def basic_async_func(id: str, endpoint: str):
+            return {"id": id, "endpoint": endpoint}
+
+        results = []
+
+        while True:
+            async_tasks = [
+                basic_async_func(str(row[0]), endpoint)
+                for row in query.fetchmany(BATCH_SIZE)
+            ]
+
+            if not async_tasks:
+                break
+
+            batch_results = await asyncio.gather(*async_tasks, return_exceptions=True)
+
+            results.extend(batch_results)
+
+        return results
+
+    await write_base_data("beavers")
+    await write_base_data("peacocks")
+
+    beavers_details = fetchmany_function.with_arguments("beavers")
+    peacocks_details = fetchmany_function.with_arguments("peacocks")
+
+    await beavers_details()
+    await peacocks_details()
+
+    # Test the details assets for row count
+    beavers_details_count_query = await beavers_details.query("SELECT COUNT(*)")
+    beavers_details_count: tuple = beavers_details_count_query.fetchone()  # type: ignore
+
+    peacocks_details_count_query = await peacocks_details.query("SELECT COUNT(*)")
+    peacocks_details_count: tuple = peacocks_details_count_query.fetchone()  # type: ignore
+
+    print(f"beavers: {beavers_details_count[0]}")
+    print(f"peacocks: {peacocks_details_count[0]}")
+
+    assert beavers_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
+    assert peacocks_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
+
+
 async def test_materialize_artifact_csv():
     @asset("test_csv_asset.csv")
     async def csv_asset():
@@ -493,6 +739,24 @@ async def test_multiple_result_artifacts():
 
     count_result = primary_query.fetchone()
     assert count_result[0] == 2
+
+
+async def test_filetype_resolution():
+    class Asset(BaseModel):
+        path: str
+
+    @asset(path="{asset.path}")
+    async def path_resolution_asset(asset: Asset):
+        return [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25},
+        ]
+
+    path_asset_class_obj = Asset(path="path_resolution_asset.parquet|csv")
+
+    path_asset = path_resolution_asset.with_arguments(path_asset_class_obj)
+
+    return await path_asset()
 
 
 async def test_pydantic_model_asset():
