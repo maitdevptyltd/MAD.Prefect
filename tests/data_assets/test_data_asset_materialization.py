@@ -1,5 +1,6 @@
 import asyncio
 from decimal import Decimal
+import json
 import random
 import string
 from uuid import UUID
@@ -808,7 +809,11 @@ async def test_pydantic_model_asset():
             isinstance(parent_model_data[3], datetime)
             and parent_model_data[3] == data.creation_date
         )
-        assert isinstance(parent_model_data[4], dict)
+
+        if filetype == "csv":
+            assert isinstance(json.loads(parent_model_data[4]), dict)
+        else:
+            assert isinstance(parent_model_data[4], dict)
 
         # Test the outputs of the nested model
         child_model = await model_asset.query("SELECT UNNEST(child)")

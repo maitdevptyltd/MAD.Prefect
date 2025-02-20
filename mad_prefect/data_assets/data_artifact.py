@@ -8,10 +8,7 @@ import pandas as pd
 from pydantic import BaseModel, TypeAdapter
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
-from mad_prefect.data_assets.utils import (
-    get_python_objects_from_pydantic_model,
-    yield_data_batches,
-)
+from mad_prefect.data_assets.utils import yield_data_batches
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import pyarrow as pa
