@@ -1,6 +1,4 @@
 from inspect import isasyncgen, iscoroutine, isgenerator
-from pydantic import BaseModel
-from typing import Union, List, Any
 
 
 async def yield_data_batches(data: object):
