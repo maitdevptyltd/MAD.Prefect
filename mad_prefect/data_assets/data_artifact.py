@@ -5,7 +5,7 @@ import duckdb
 import httpx
 import jsonlines
 import pandas as pd
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
