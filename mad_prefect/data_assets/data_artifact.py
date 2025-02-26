@@ -95,6 +95,7 @@ class DataArtifact:
         entities = self._yield_entities_to_persist()
         file: BinaryIO | None = None
         writer: jsonlines.Writer | None = None
+        type_adapter: TypeAdapter = TypeAdapter(Any)
 
         try:
             next_entity = await anext(entities)
@@ -106,7 +107,7 @@ class DataArtifact:
                     writer = jsonlines.Writer(
                         file,
                         dumps=lambda obj: json.dumps(  # type: ignore
-                            TypeAdapter(Any).dump_python(obj), cls=MADJSONEncoder
+                            type_adapter.dump_python(obj), cls=MADJSONEncoder
                         ),
                     )
 
@@ -156,6 +157,7 @@ class DataArtifact:
         entities = self._yield_entities_to_persist()
         file: BinaryIO | None = None
         writer: pq.ParquetWriter | None = None
+        type_adapter = TypeAdapter(Any)
 
         try:
             next_entity = await anext(entities)
@@ -165,7 +167,7 @@ class DataArtifact:
                 table_or_batch: pa.RecordBatch | pa.Table = (
                     b
                     if isinstance(b, (pa.Table, pa.RecordBatch))
-                    else pa.RecordBatch.from_pylist(TypeAdapter(Any).dump_python(b))
+                    else pa.RecordBatch.from_pylist(type_adapter.dump_python(b))
                 )
 
                 # Use the first entity to determine the file's schema
@@ -204,6 +206,7 @@ class DataArtifact:
     async def _persist_csv(self):
         entities = self._yield_entities_to_persist()
         file: BinaryIO | None = None
+        type_adapter = TypeAdapter(Any)
         first_chunk = True  # Track whether we need to write CSV headers
 
         try:
@@ -214,7 +217,7 @@ class DataArtifact:
                 # Otherwise, convert it to a Table from a list-of-dicts or list-of-rows.
                 if not isinstance(next_entity, (pa.Table, pa.RecordBatch)):
                     next_entity = pa.Table.from_pylist(
-                        TypeAdapter(Any).dump_python(next_entity)
+                        type_adapter.dump_python(next_entity)
                     )
 
                 # If the file isn't open yet, open it
