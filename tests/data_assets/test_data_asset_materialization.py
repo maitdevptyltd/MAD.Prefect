@@ -1,9 +1,11 @@
 import asyncio
 from decimal import Decimal
+import json
 import random
 import string
 from uuid import UUID
 import duckdb
+from pydantic import BaseModel
 from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_asset import DataAsset
 from datetime import datetime, date
@@ -758,6 +760,72 @@ async def test_filetype_resolution():
     return await path_asset()
 
 
+
+async def test_pydantic_model_asset():
+    class PedanticChild(BaseModel):
+        child_name: str
+        test_score: float
+
+    class PedanticPydanticClass(BaseModel):
+        id: int
+        pendantic_levels: float
+        description: str
+        creation_date: datetime
+        child: PedanticChild
+
+    data = PedanticPydanticClass(
+        id=666999555,
+        pendantic_levels=0.89,
+        description="Very pedantic",
+        creation_date=datetime.now(),
+        child=PedanticChild(child_name="John", test_score=0.6667),
+    )
+
+    @asset(path="pydantic_model_asset.{filetype}")
+    async def pydantic_model_asset(model: BaseModel, filetype: str):
+        return model
+
+    filetypes = ["json", "parquet", "csv"]
+
+    for filetype in filetypes:
+
+        model_asset = pydantic_model_asset.with_arguments(data, filetype)
+
+        # Test the outputs of the model
+        parent_model = await model_asset.query()
+        assert parent_model
+
+        parent_model_data = parent_model.fetchone()
+        assert parent_model_data
+
+        assert (
+            isinstance(parent_model_data[0], int) and parent_model_data[0] == 666999555
+        )
+        assert isinstance(parent_model_data[1], float) and parent_model_data[1] == 0.89
+        assert (
+            isinstance(parent_model_data[2], str)
+            and parent_model_data[2] == "Very pedantic"
+        )
+        assert (
+            isinstance(parent_model_data[3], datetime)
+            and parent_model_data[3] == data.creation_date
+        )
+
+        if filetype == "csv":
+            return
+
+        assert isinstance(parent_model_data[4], dict)
+
+        # Test the outputs of the nested model
+        child_model = await model_asset.query("SELECT UNNEST(child)")
+
+        assert child_model
+
+        child_model_data = child_model.fetchone()
+        assert child_model_data
+        assert isinstance(child_model_data[0], str) and child_model_data[0] == "John"
+        assert isinstance(child_model_data[1], float) and child_model_data[1] == 0.6667
+        
 async def test_module_function_asset_name():
     from tests.mad_data_test.dw import ferocious_penguins
     from tests.mad_data_test.dw.test_endpoint import dynamic_elephants

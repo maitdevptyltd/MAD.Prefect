@@ -33,7 +33,10 @@ class DataArtifactCollector:
             else:
                 path = self._build_artifact_path(self.dir, fragment_number=fragment_num)
                 fragment_artifact = DataArtifact(
-                    path, fragment, self.read_json_options, self.read_csv_options
+                    path,
+                    fragment,
+                    self.read_json_options,
+                    self.read_csv_options,
                 )
 
             if await fragment_artifact.persist():
