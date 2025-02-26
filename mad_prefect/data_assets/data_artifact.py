@@ -1,10 +1,11 @@
 import json
 import os
-from typing import BinaryIO, Sequence, cast
+from typing import BinaryIO, Sequence, cast, Any
 import duckdb
 import httpx
 import jsonlines
 import pandas as pd
+from pydantic import TypeAdapter
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
@@ -94,6 +95,7 @@ class DataArtifact:
         entities = self._yield_entities_to_persist()
         file: BinaryIO | None = None
         writer: jsonlines.Writer | None = None
+        type_adapter: TypeAdapter = TypeAdapter(Any)
 
         try:
             next_entity = await anext(entities)
@@ -104,7 +106,9 @@ class DataArtifact:
                     file = await self._open()
                     writer = jsonlines.Writer(
                         file,
-                        dumps=lambda obj: json.dumps(obj, cls=MADJSONEncoder),  # type: ignore
+                        dumps=lambda obj: json.dumps(  # type: ignore
+                            type_adapter.dump_python(obj), cls=MADJSONEncoder
+                        ),
                     )
 
                 table_or_batch: pa.RecordBatch | pa.Table = (
@@ -153,6 +157,7 @@ class DataArtifact:
         entities = self._yield_entities_to_persist()
         file: BinaryIO | None = None
         writer: pq.ParquetWriter | None = None
+        type_adapter = TypeAdapter(Any)
 
         try:
             next_entity = await anext(entities)
@@ -162,7 +167,7 @@ class DataArtifact:
                 table_or_batch: pa.RecordBatch | pa.Table = (
                     b
                     if isinstance(b, (pa.Table, pa.RecordBatch))
-                    else pa.RecordBatch.from_pylist(b)
+                    else pa.RecordBatch.from_pylist(type_adapter.dump_python(b))
                 )
 
                 # Use the first entity to determine the file's schema
@@ -201,6 +206,7 @@ class DataArtifact:
     async def _persist_csv(self):
         entities = self._yield_entities_to_persist()
         file: BinaryIO | None = None
+        type_adapter = TypeAdapter(Any)
         first_chunk = True  # Track whether we need to write CSV headers
 
         try:
@@ -210,7 +216,9 @@ class DataArtifact:
                 # If it's already a pa.Table or pa.RecordBatch, use it.
                 # Otherwise, convert it to a Table from a list-of-dicts or list-of-rows.
                 if not isinstance(next_entity, (pa.Table, pa.RecordBatch)):
-                    next_entity = pa.Table.from_pylist(next_entity)
+                    next_entity = pa.Table.from_pylist(
+                        type_adapter.dump_python(next_entity)
+                    )
 
                 # If the file isn't open yet, open it
                 if not file:
