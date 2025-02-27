@@ -781,7 +781,3 @@ async def test_path_with_periods():
     globs = fs.glob("path.with.periods/**/*.parquet")
 
     assert len(globs) == 2
-
-
-# if __name__ == "__main__":
-#     asyncio.run(test_no_result_artifact())
