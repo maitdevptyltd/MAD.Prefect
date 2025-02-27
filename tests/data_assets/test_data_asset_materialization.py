@@ -756,3 +756,32 @@ async def test_filetype_resolution():
     path_asset = path_resolution_asset.with_arguments(path_asset_class_obj)
 
     return await path_asset()
+
+
+async def test_path_with_periods():
+    fs = await get_fs()
+
+    @asset(path="path.with.periods/{asset_number}/people.parquet")
+    async def list_people(asset_number):
+        return [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25},
+        ]
+
+    async def materialize_people():
+        await asyncio.gather(
+            list_people(asset_number=1),
+            list_people(asset_number=2),
+        )
+
+    await materialize_people()
+
+    fs = await get_fs()
+
+    globs = fs.glob("path.with.periods/**/*.parquet")
+
+    assert len(globs) == 2
+
+
+# if __name__ == "__main__":
+#     asyncio.run(test_no_result_artifact())

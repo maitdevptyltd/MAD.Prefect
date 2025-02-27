@@ -240,7 +240,7 @@ class DataAsset:
         return self.result_artifacts[0]
 
     def _create_result_artifacts(self) -> List[DataArtifact]:
-        base_path = self.path.split(".")[0]
+        base_path = self.path.rsplit(".", 1)[0]
         result_artifacts = []
         for filetype in self.result_artifact_filetypes:
             result_artifacts.append(
@@ -342,5 +342,25 @@ class DataAsset:
             return True
 
     def get_result_artifact_filetypes(self) -> List[str]:
-        filetypes_part = self.path.split(".")[-1]
-        return filetypes_part.split("|")
+
+        possible_delimeters = []
+
+        for filetype in ARTIFACT_FILE_TYPES.__args__:
+            if f".{filetype}" in self.path:
+                possible_delimeters.append(f".{filetype}")
+
+        if len(possible_delimeters) != 1:
+            raise ValueError(
+                f"Asset path incorrectly formatted.\nPath should be formatted as 'path/to/asset.<filetype>' or 'path/to/asset.<filetype_1>|<filetype_2>'\ne.g. 'path/to/asset.parquet'\ne.g.'path/to/asset.parquet|json|csv'"
+            )
+
+        filetypes_part = self.path.rsplit(".", 1)[-1]
+        filetypes_list = filetypes_part.split("|")
+
+        for provided_filetype in filetypes_list:
+            if provided_filetype not in ARTIFACT_FILE_TYPES.__args__:
+                raise ValueError(
+                    f"Asset path contains incorrect result artifact filetype: {filetype}"
+                )
+
+        return filetypes_list
