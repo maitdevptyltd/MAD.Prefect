@@ -1,3 +1,14 @@
+## 2.2.0 (2025-03-04)
+
+### Feat
+
+- pydantic result types (#14)
+- asset names now include the relative module path (#12)
+
+### Fix
+
+- handle result paths with multiple periods i.e this.is.a.path.parquet
+
 ## 2.1.1 (2025-02-14)
 
 ### Fix
