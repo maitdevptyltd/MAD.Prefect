@@ -2,6 +2,7 @@ from datetime import datetime, UTC, timedelta, timezone
 import hashlib
 import inspect
 import json
+from pathlib import Path
 import re
 from typing import Callable, List
 import duckdb
@@ -241,12 +242,13 @@ class DataAsset:
         return self.result_artifacts[0]
 
     def _create_result_artifacts(self) -> List[DataArtifact]:
-        base_path = self.path.split(".")[0]
+        path = Path(self.path)
         result_artifacts = []
+
         for filetype in self.result_artifact_filetypes:
             result_artifacts.append(
                 DataArtifact(
-                    f"{base_path}.{filetype}",
+                    path.with_suffix(filetype).as_posix(),
                     read_json_options=self.read_json_options,
                     read_csv_options=self.read_csv_options,
                 )
@@ -343,5 +345,7 @@ class DataAsset:
             return True
 
     def get_result_artifact_filetypes(self) -> List[str]:
-        filetypes_part = self.path.split(".")[-1]
-        return filetypes_part.split("|")
+        path = Path(self.path)
+        filetypes_part = path.suffix
+
+        return [f if f.startswith(".") else f".{f}" for f in filetypes_part.split("|")]
