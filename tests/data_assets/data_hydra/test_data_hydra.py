@@ -8,7 +8,13 @@ from mad_prefect.data_assets.data_hydra import (
 from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
 
 
-@asset("tenant_id={tenant_id}", context_factory={"tenant_id": "abc123"})
+@asset(
+    "tenant_id={tenant_id}",
+    context_factory=[
+        {"tenant_id": "abc123"},
+        {"tenant_id": "123abc"},
+    ],
+)
 class TenantAsset(BaseModel):
     tenant_id: str
 
@@ -30,7 +36,7 @@ def tenant_asset_hydra():
     return TenantAsset
 
 
-async def test_data_hydra_materializes_single(tenant_asset_hydra):
+async def test_data_hydra_proof_of_concept(tenant_asset_hydra):
     # Ensure the tenant_asset_hydra is camouflaged as the TenantAsset (intellisense for work_orders)
     hydra_work_orders = tenant_asset_hydra.work_orders
     assert isinstance(hydra_work_orders, DataHydraNeck)
