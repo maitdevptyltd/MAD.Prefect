@@ -1,6 +1,7 @@
 import asyncio
 from functools import cached_property
 from typing import Any, TypeVar
+from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_hydra import DataHydra
 from mad_prefect.data_assets.data_asset import DataAsset
 from mad_prefect.data_assets.data_hydra.types import ContextFactoryType
@@ -29,6 +30,8 @@ class DataHydraNeck:
 
         async for batch in _batched(self.yield_hydra_heads(), max_concurrency):
             result = await asyncio.gather(*[h.materialize() for h in batch])
+            
+        return DataArtifact(self.hydra.)
 
     async def yield_hydra_heads(self):
         from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead

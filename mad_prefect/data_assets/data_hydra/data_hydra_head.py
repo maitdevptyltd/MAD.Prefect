@@ -27,7 +27,7 @@ class DataHydraHead:
         # as well as the dependencies of the asset
         instance = self.asset_cls_instance
         asset = self.neck.asset
-        # asset._bound_arguments = asset._fn_signature.bind_partial(**self.context)
 
-        result = await asset()
+        # Ensure to pass through instance for the self argument
+        result = await asset(instance)
         return result
