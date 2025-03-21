@@ -1,19 +1,20 @@
 import pytest
 from pydantic import BaseModel, ConfigDict
 from mad_prefect.data_assets import asset
+from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_hydra import (
     DataAsset,
     DataHydra,
     DataHydraOptions,
-    DataHydraHead,
 )
+from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead
 
 
 class TenantAsset(BaseModel):
     tenant_id: str
 
     @asset("tenant_id=1/work_orders.parquet")
-    async def work_orders():
+    async def work_orders(self):
         return [1, 2, 3]
 
     # TODO: This is required in order to define a DataAsset as a function as seen above
@@ -32,10 +33,16 @@ tenant_asset_hydra = DataHydra(
 )
 
 
-async def test_hydra_dogs():
-    hydra_dogs = tenant_asset_hydra.work_orders
-    assert isinstance(hydra_dogs, DataHydraHead)
-    assert await hydra_dogs()
+async def test_data_hydra_materializes_single():
+    # Ensure the tenant_asset_hydra is camouflaged as the TenantAsset (intellisense for work_orders)
+    hydra_work_orders = tenant_asset_hydra.work_orders
+    assert isinstance(hydra_work_orders, DataHydraHead)
+
+    # When materializing a hydra's data assets, it should probably? return a DataAsset?
+    # although the DataAsset it returns won't represent a single asset but instead the
+    # cartesian product of all the data assets in the hydra
+    result = await hydra_work_orders()
+    assert isinstance(result, DataArtifact)
 
 
 async def test_hydra_tenant_id_exception():

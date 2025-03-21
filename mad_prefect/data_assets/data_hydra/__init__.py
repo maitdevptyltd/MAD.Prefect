@@ -1,6 +1,6 @@
 import asyncio
 from inspect import get_annotations
-from typing import Any, Callable, Generic, TypeVar, cast
+from typing import Callable, Generic, TypeVar, cast
 from pydantic import BaseModel, ConfigDict
 from typing import Callable, AsyncGenerator, Generator, Union
 from injector import ClassProvider, inject, Injector, BoundKey
@@ -41,10 +41,12 @@ class DataHydra(Generic[T]):
         self._injector = Injector()
 
     def __getattr__(self, name: str):
+        from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead
+
         # If the attr we're trying to get is a DataAsset, then we spawn a DataHydraHead
         val, type = self.get_value_and_type(name)
 
-        if issubclass(type, DataAsset):
+        if val and issubclass(type, DataAsset):
             return DataHydraHead(hydra=self, asset=val)
 
         raise ValueError(
@@ -66,15 +68,3 @@ class DataHydra(Generic[T]):
             annot = get_annotations(attr_val)
 
         return attr_val, annot
-
-
-class DataHydraHead:
-    hydra: DataHydra
-    asset: DataAsset
-
-    def __init__(self, hydra: DataHydra, asset: DataAsset):
-        self.hydra = hydra
-        self.asset = asset
-
-    async def __call__(self, *args: Any, **kwds: Any) -> Any:
-        return "yo"
