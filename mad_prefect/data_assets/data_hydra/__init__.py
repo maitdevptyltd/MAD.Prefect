@@ -1,29 +1,10 @@
-import asyncio
+from functools import cached_property
 from inspect import get_annotations
-from typing import Callable, Generic, TypeVar, cast
-from pydantic import BaseModel, ConfigDict
-from typing import Callable, AsyncGenerator, Generator, Union
-from injector import ClassProvider, inject, Injector, BoundKey
-import pytest
-
-from mad_prefect.data_assets import asset
+from typing import Generic, TypeVar, cast
+from pydantic import BaseModel
+from injector import ClassProvider, Injector
 from mad_prefect.data_assets.data_asset import DataAsset
-
-ContextFactoryType = Union[
-    dict,
-    Callable[..., dict],
-    Callable[..., Generator[dict, None, None]],
-    Callable[..., AsyncGenerator[dict, None]],
-    list[dict],
-    list[Callable[..., dict]],
-    list[Callable[..., Generator[dict, None, None]]],
-    list[Callable[..., AsyncGenerator[dict, None]]],
-    None,
-]
-
-
-class DataHydraOptions(BaseModel):
-    context_factory: ContextFactoryType = None
+from mad_prefect.data_assets.data_hydra.types import DataHydraOptions
 
 
 T = TypeVar("T")
@@ -38,16 +19,36 @@ class DataHydra(Generic[T]):
     def __init__(self, asset_cls: type[T], options: DataHydraOptions):
         self._asset_cls = asset_cls
         self._options = options
-        self._injector = Injector()
+        self._scope = Injector()
+
+        # Register the asset_cls class so that we can inject it later
+        # which will allow us to inject the dependencies of the asset_cls
+        self._scope.binder.bind(
+            self._asset_cls,
+            to=ClassProvider(self._asset_cls),
+        )
+
+        # Register the DataHydra so we can inject it later
+        self._scope.binder.bind(DataHydra, to=self)
+
+    @cached_property
+    def hydra(self):
+        # The DataHydra represents a class, and injects its dependencies.
+        # We use cached_property to only inject the dependencies once, lazily.
+        return self._scope.get(self._asset_cls)
 
     def __getattr__(self, name: str):
-        from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead
+        if name == "__scope__":
+            return
 
-        # If the attr we're trying to get is a DataAsset, then we spawn a DataHydraHead
+        from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
+
+        # If the attr we're trying to get is a DataAsset, then we spawn a DataHydraNeck
         val, type = self.get_value_and_type(name)
 
+        # TODO: check if we've already grown a neck for this asset
         if val and issubclass(type, DataAsset):
-            return DataHydraHead(hydra=self, asset=val)
+            return DataHydraNeck(self, val)
 
         raise ValueError(
             f"DataHydra cannot resolve attribute {name} in {self._asset_cls} because the attribute is not a DataAsset"
@@ -67,4 +68,4 @@ class DataHydra(Generic[T]):
         else:
             annot = get_annotations(attr_val)
 
-        return attr_val, annot
+        return attr_val, cast(type, annot)

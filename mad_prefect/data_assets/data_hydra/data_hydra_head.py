@@ -1,16 +1,17 @@
-from typing import Any
-from mad_prefect.data_assets.data_hydra import DataHydra
-from mad_prefect.data_assets.data_asset import DataAsset
-
-
 class DataHydraHead:
+    from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
 
-    hydra: DataHydra
-    asset: DataAsset
+    def __init__(self, neck: DataHydraNeck, context: dict | None = None):
+        self.neck = neck
+        self.context = context
 
-    def __init__(self, hydra: DataHydra, asset: DataAsset):
-        self.hydra = hydra
-        self.asset = asset
+        self._scope = neck.hydra._scope.create_child_injector()
+        self._scope.binder.bind(DataHydraHead, to=self)
+        self._scope.binder.bind(dict, to=context)
 
-    async def __call__(self, *args: Any, **kwds: Any) -> Any:
-        return await self.asset(self.hydra)
+    async def materialize(self):
+        asset = self.neck.asset
+
+        # Now we just need to ensure the asset materializes with the context
+        # and dependency injection
+        await self._scope.call_with_injection(asset)

@@ -5,9 +5,9 @@ from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_hydra import (
     DataAsset,
     DataHydra,
-    DataHydraOptions,
 )
-from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead
+from mad_prefect.data_assets.data_hydra.types import DataHydraOptions
+from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
 
 
 class TenantAsset(BaseModel):
@@ -25,18 +25,20 @@ class TenantAsset(BaseModel):
     )
 
 
-tenant_asset_hydra = DataHydra(
-    TenantAsset,
-    DataHydraOptions(
-        context_factory={"tenant_id": "abcdef_123", "other_prop": True},
-    ),
-)
+@pytest.fixture
+def tenant_asset_hydra():
+    return DataHydra(
+        TenantAsset,
+        DataHydraOptions(
+            context_factory={"tenant_id": "abcdef_123", "other_prop": True},
+        ),
+    )
 
 
-async def test_data_hydra_materializes_single():
+async def test_data_hydra_materializes_single(tenant_asset_hydra):
     # Ensure the tenant_asset_hydra is camouflaged as the TenantAsset (intellisense for work_orders)
     hydra_work_orders = tenant_asset_hydra.work_orders
-    assert isinstance(hydra_work_orders, DataHydraHead)
+    assert isinstance(hydra_work_orders, DataHydraNeck)
 
     # When materializing a hydra's data assets, it should probably? return a DataAsset?
     # although the DataAsset it returns won't represent a single asset but instead the
@@ -45,7 +47,7 @@ async def test_data_hydra_materializes_single():
     assert isinstance(result, DataArtifact)
 
 
-async def test_hydra_tenant_id_exception():
+async def test_hydra_tenant_id_exception(tenant_asset_hydra):
     with pytest.raises(Exception) as e:
         assert tenant_asset_hydra.tenant_id
 
