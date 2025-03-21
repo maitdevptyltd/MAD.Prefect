@@ -1,10 +1,9 @@
-from functools import cached_property
 from inspect import get_annotations
 from typing import Generic, Self, TypeVar, Union, cast
 from pydantic import BaseModel
 from injector import ClassProvider, Injector
 from mad_prefect.data_assets.data_asset import DataAsset
-from mad_prefect.data_assets.data_hydra.types import DataHydraOptions
+from mad_prefect.data_assets.options import DataHydraOptions
 
 
 T = TypeVar("T")
@@ -36,7 +35,9 @@ class DataHydra(Generic[T]):
         self._scope.binder.bind(DataHydraOptions, to=options)
 
     def __getattr__(self, name: str):
-        if name == "__scope__":
+        # DataHydra camoflauges itself as the asset_cls, so we must
+        # proxy the attribute access to the asset_cls
+        if name.startswith("_"):
             return
 
         from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck

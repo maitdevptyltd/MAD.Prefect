@@ -1,7 +1,7 @@
 import inspect
 from typing import AsyncIterable, TypeVar
-from injector import Injector, inject
-from mad_prefect.data_assets.data_hydra.types import ContextFactoryType
+from injector import Injector
+from mad_prefect.data_assets.options import ContextFactoryType
 
 
 async def _yield_context_dicts(

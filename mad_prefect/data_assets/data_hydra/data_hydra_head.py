@@ -1,5 +1,6 @@
 from functools import cached_property
-from injector import inject
+from pathlib import Path
+from mad_prefect.data_assets.options import DataHydraOptions
 
 
 class DataHydraHead:
@@ -14,6 +15,23 @@ class DataHydraHead:
         self._scope.binder.bind(DataHydraHead, to=self)
         self._scope.binder.bind(dict, to=context)
 
+        self.options = self._scope.get(DataHydraOptions)
+
+        # The path in options comes from the root DataHydra (the class)
+        # so it should be considered the base path.
+        all_params = {
+            **self.asset_cls_instance.__dict__,
+            **self.context,
+            "context": context,
+        }
+
+        absolute_path = Path(self.options.path) / Path(self.neck.asset.path)
+        absolute_path = absolute_path.as_posix()
+        absolute_path = absolute_path.format(**all_params)
+
+        # Override the DataHydraHead's path with the absolute path
+        self.asset = self.neck.asset.with_options(path=absolute_path)
+
     @cached_property
     def asset_cls_instance(self):
         # The DataHydra represents a class, and injects its dependencies.
@@ -23,11 +41,9 @@ class DataHydraHead:
         )
 
     async def materialize(self):
-        # We need to modify the asset's _fn and inject the context
-        # as well as the dependencies of the asset
+        # Get the instance to the original Hydra class instance
         instance = self.asset_cls_instance
-        asset = self.neck.asset
 
         # Ensure to pass through instance for the self argument
-        result = await asset(instance)
+        result = await self.asset(instance)
         return result

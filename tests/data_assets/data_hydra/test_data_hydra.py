@@ -4,16 +4,15 @@ from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_hydra import (
     DataAsset,
-    DataHydra,
 )
-from mad_prefect.data_assets.data_hydra.types import DataHydraOptions
 from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
 
 
+@asset("tenant_id={tenant_id}", context_factory={"tenant_id": "abc123"})
 class TenantAsset(BaseModel):
     tenant_id: str
 
-    @asset("tenant_id={self.tenant_id}/work_orders.parquet")
+    @asset("work_orders.parquet")
     async def work_orders(self):
         assert self.tenant_id
         return [1, 2, 3]
@@ -28,12 +27,7 @@ class TenantAsset(BaseModel):
 
 @pytest.fixture
 def tenant_asset_hydra():
-    return DataHydra(
-        TenantAsset,
-        DataHydraOptions(
-            context_factory={"tenant_id": "abcdef_123", "other_prop": True},
-        ),
-    )
+    return TenantAsset
 
 
 async def test_data_hydra_materializes_single(tenant_asset_hydra):

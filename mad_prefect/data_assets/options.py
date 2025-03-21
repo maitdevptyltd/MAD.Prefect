@@ -1,5 +1,28 @@
 from pydantic import BaseModel
-from typing import Dict, List, Optional, Union
+from typing import (
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Union,
+)
+
+ContextFactoryResultType = dict | list[dict]
+ContextFactoryType = Union[
+    ContextFactoryResultType,
+    Callable[..., ContextFactoryResultType],
+    Callable[..., Generator[ContextFactoryResultType, None, None]],
+    Callable[..., AsyncGenerator[ContextFactoryResultType, None]],
+    Callable[..., Awaitable[ContextFactoryResultType]],
+    list[Callable[..., ContextFactoryResultType]],
+    list[Callable[..., Generator[ContextFactoryResultType, None, None]]],
+    list[Callable[..., AsyncGenerator[ContextFactoryResultType, None]]],
+    list[Callable[..., Awaitable[ContextFactoryResultType]]],
+    None,
+]
 
 
 class ReadJsonOptions(BaseModel):
@@ -70,3 +93,13 @@ class ReadCSVOptions(BaseModel):
     types: Optional[Union[List[str], Dict[str, str]]] = None
     dtypes: Optional[Union[List[str], Dict[str, str]]] = None
     column_types: Optional[Union[List[str], Dict[str, str]]] = None
+
+
+class DataAssetOptions(BaseModel):
+    path: str
+    name: str | None = None
+
+
+class DataHydraOptions(DataAssetOptions):
+    context_factory: ContextFactoryType = None
+    max_concurrency: int = 5

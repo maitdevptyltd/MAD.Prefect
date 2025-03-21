@@ -1,12 +1,9 @@
 import asyncio
-from functools import cached_property
-from typing import Any, TypeVar
-from mad_prefect.data_assets.data_artifact import DataArtifact
+from typing import Any
 from mad_prefect.data_assets.data_hydra import DataHydra
 from mad_prefect.data_assets.data_asset import DataAsset
-from mad_prefect.data_assets.data_hydra.types import ContextFactoryType
 from mad_prefect.data_assets.data_hydra.utils import _batched, _yield_context_dicts
-from .types import ContextFactoryType, DataHydraOptions
+from ..options import DataHydraOptions
 
 
 class DataHydraNeck:
@@ -21,17 +18,23 @@ class DataHydraNeck:
         self._scope.binder.bind(DataHydraNeck, to=self)
 
     async def __call__(self, *args: Any, **kwds: Any) -> Any:
+        from mad_prefect.data_assets.data_hydra.data_hydra_artifact import (
+            DataHydraArtifact,
+        )
+
         """
         The DataHydraNeck organizes the DataHydraHead instances into a batched
         pipeline, materializes the data assets, and then returns a DataArtifact
         representing the cartesian product of all.
         """
         max_concurrency = self.options.max_concurrency
+        hydra_heads = []
 
         async for batch in _batched(self.yield_hydra_heads(), max_concurrency):
-            result = await asyncio.gather(*[h.materialize() for h in batch])
-            
-        return DataArtifact(self.hydra.)
+            await asyncio.gather(*[h.materialize() for h in batch])
+            hydra_heads.extend(batch)
+
+        return DataHydraArtifact(self.options.path, hydra_heads=hydra_heads)
 
     async def yield_hydra_heads(self):
         from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead

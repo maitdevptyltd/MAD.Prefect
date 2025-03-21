@@ -1,8 +1,15 @@
 import datetime
+from inspect import isclass
 import os
 from typing import Callable, Literal
-
-from mad_prefect.data_assets.options import ReadJsonOptions, ReadCSVOptions
+from mad_prefect.data_assets.options import (
+    ContextFactoryType,
+)
+from mad_prefect.data_assets.options import (
+    DataHydraOptions,
+    ReadJsonOptions,
+    ReadCSVOptions,
+)
 
 ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", "_asset_metadata")
 ARTIFACT_FILE_TYPES = Literal["parquet", "json", "csv"]
@@ -17,11 +24,26 @@ def asset(
     read_json_options: ReadJsonOptions | None = None,
     read_csv_options: ReadCSVOptions | None = None,
     cache_expiration: datetime.timedelta | None = None,
+    context_factory: ContextFactoryType = None,
+    max_concurrency: int = 5,
 ):
     # Prevent a circular reference as it references the env variable
     from mad_prefect.data_assets.data_asset import DataAsset
+    from mad_prefect.data_assets.data_hydra import DataHydra
 
     def decorator(fn: Callable):
+        # If fn is a cls, it will be a DataHydra
+        if isclass(fn):
+            return DataHydra(
+                fn,
+                DataHydraOptions(
+                    path=path,
+                    max_concurrency=max_concurrency,
+                    name=name,
+                    context_factory=context_factory,
+                ),
+            )
+
         return DataAsset(
             fn,
             path,
