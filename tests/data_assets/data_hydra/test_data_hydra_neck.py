@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 # Otherwise, adjust the import paths accordingly.
 from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead
 from mad_prefect.data_assets.data_hydra.data_hydra_neck import (
-    _context_to_head,
     DataHydraNeck,
 )
+from mad_prefect.data_assets.data_hydra.utils import _yield_context_dicts
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ async def test_none_context(dummy_neck):
     If context is None, _context_to_head should yield exactly one DataHydraHead
     with no explicit context.
     """
-    results = [head async for head in _context_to_head(dummy_neck, None)]
+    results = [head async for head in _yield_context_dicts(None)]
     assert len(results) == 1
     assert isinstance(results[0], DataHydraHead)
     # By default, you'd expect no custom context
@@ -36,7 +36,7 @@ async def test_single_dict_context(dummy_neck):
     with that dict as context.
     """
     context = {"a": 1, "b": 2}
-    results = [head async for head in _context_to_head(dummy_neck, context)]
+    results = [head async for head in _yield_context_dicts(context)]
     assert len(results) == 1
     assert isinstance(results[0], DataHydraHead)
     assert getattr(results[0], "context", None) == context
@@ -47,7 +47,7 @@ async def test_list_of_dicts_context(dummy_neck):
     If context is a list of dicts, _context_to_head should yield a head for each dict.
     """
     context_list = [{"a": 1}, {"b": 2}, {"c": 3}]
-    results = [head async for head in _context_to_head(dummy_neck, context_list)]
+    results = [head async for head in _yield_context_dicts(context_list)]
     assert len(results) == 3
     for i, result in enumerate(results):
         assert isinstance(result, DataHydraHead)
@@ -67,7 +67,7 @@ async def test_list_nested(dummy_neck):
         ],
         None,  # Should yield a single head with no context
     ]
-    results = [head async for head in _context_to_head(dummy_neck, context_nested)]
+    results = [head async for head in _yield_context_dicts(context_nested)]
     assert len(results) == 4
     # Checking each head
     assert getattr(results[0], "context", None) == {"x": 1}
@@ -85,7 +85,7 @@ async def test_callable_returns_dict(dummy_neck):
     def context_callable(_):
         return {"test": "callable_returns_dict"}
 
-    results = [head async for head in _context_to_head(dummy_neck, context_callable)]
+    results = [head async for head in _yield_context_dicts(context_callable)]
     assert len(results) == 1
     assert isinstance(results[0], DataHydraHead)
     assert results[0].context == {"test": "callable_returns_dict"}
@@ -104,7 +104,7 @@ async def test_callable_returns_awaitable_dict(dummy_neck):
     def context_callable(_):
         return async_dict()  # returns a coroutine
 
-    results = [head async for head in _context_to_head(dummy_neck, context_callable)]
+    results = [head async for head in _yield_context_dicts(context_callable)]
     assert len(results) == 1
     assert isinstance(results[0], DataHydraHead)
     assert results[0].context == {"test": "awaitable_dict"}
@@ -123,10 +123,10 @@ async def test_callable_returns_sync_generator(dummy_neck):
     def context_callable(_):
         return sync_generator()
 
-    results = [head async for head in _context_to_head(dummy_neck, context_callable)]
+    results = [head async for head in _yield_context_dicts(context_callable)]
     assert len(results) == 2
-    assert results[0].context == {"one": 1}
-    assert results[1].context == {"two": 2}
+    assert results[0] == {"one": 1}
+    assert results[1] == {"two": 2}
 
 
 async def test_callable_returns_async_generator(dummy_neck):
@@ -142,10 +142,10 @@ async def test_callable_returns_async_generator(dummy_neck):
     def context_callable(_):
         return async_gen()
 
-    results = [head async for head in _context_to_head(dummy_neck, context_callable)]
+    results = [head async for head in _yield_context_dicts(context_callable)]
     assert len(results) == 2
-    assert results[0].context == {"alpha": "a"}
-    assert results[1].context == {"beta": "b"}
+    assert results[0] == {"alpha": "a"}
+    assert results[1] == {"beta": "b"}
 
 
 async def test_callable_returns_unsupported_type(dummy_neck):
@@ -158,7 +158,7 @@ async def test_callable_returns_unsupported_type(dummy_neck):
         return 123  # Unsupported type
 
     with pytest.raises(TypeError, match="Callable returned an unsupported type"):
-        _ = [head async for head in _context_to_head(dummy_neck, context_callable)]  # type: ignore
+        _ = [head async for head in _yield_context_dicts(dummy_neck, context_callable)]  # type: ignore
 
 
 async def test_unsupported_context_type(dummy_neck):
@@ -167,7 +167,7 @@ async def test_unsupported_context_type(dummy_neck):
     _context_to_head should raise a TypeError immediately.
     """
     with pytest.raises(TypeError, match="Unsupported context type"):
-        _ = [head async for head in _context_to_head(dummy_neck, 42)]  # type: ignore
+        _ = [head async for head in _yield_context_dicts(dummy_neck, 42)]  # type: ignore
 
 
 async def test_callable_returns_awaitable_list_of_dicts(dummy_neck):
@@ -186,7 +186,7 @@ async def test_callable_returns_awaitable_list_of_dicts(dummy_neck):
         return async_list_of_dicts()
 
     # Collect all heads from the async generator
-    results = [head async for head in _context_to_head(dummy_neck, context_callable)]
+    results = [head async for head in _yield_context_dicts(context_callable)]
 
     assert len(results) == 2, "Expected two heads for two dicts in the returned list"
     assert isinstance(results[0], DataHydraHead)

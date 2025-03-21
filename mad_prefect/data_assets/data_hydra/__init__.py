@@ -1,6 +1,6 @@
 from functools import cached_property
 from inspect import get_annotations
-from typing import Generic, TypeVar, cast
+from typing import Generic, Self, TypeVar, Union, cast
 from pydantic import BaseModel
 from injector import ClassProvider, Injector
 from mad_prefect.data_assets.data_asset import DataAsset
@@ -12,7 +12,7 @@ T = TypeVar("T")
 
 class DataHydra(Generic[T]):
     # Make DataHydra's instance signature match T, purely for intellisense
-    def __new__(cls, asset_cls: type[T], options: DataHydraOptions) -> T:
+    def __new__(cls, asset_cls: type[T], options: DataHydraOptions) -> Union[T, Self]:
         instance = super().__new__(cls)
         return cast(T, instance)
 
@@ -31,11 +31,9 @@ class DataHydra(Generic[T]):
         # Register the DataHydra so we can inject it later
         self._scope.binder.bind(DataHydra, to=self)
 
-    @cached_property
-    def hydra(self):
-        # The DataHydra represents a class, and injects its dependencies.
-        # We use cached_property to only inject the dependencies once, lazily.
-        return self._scope.get(self._asset_cls)
+        # Provide default options that will be overridden potentially
+        # from the user via the asset decorator
+        self._scope.binder.bind(DataHydraOptions, to=options)
 
     def __getattr__(self, name: str):
         if name == "__scope__":
@@ -48,7 +46,7 @@ class DataHydra(Generic[T]):
 
         # TODO: check if we've already grown a neck for this asset
         if val and issubclass(type, DataAsset):
-            return DataHydraNeck(self, val)
+            return DataHydraNeck(self, val, self._scope.get(DataHydraOptions))
 
         raise ValueError(
             f"DataHydra cannot resolve attribute {name} in {self._asset_cls} because the attribute is not a DataAsset"

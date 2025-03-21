@@ -13,8 +13,9 @@ from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
 class TenantAsset(BaseModel):
     tenant_id: str
 
-    @asset("tenant_id=1/work_orders.parquet")
+    @asset("tenant_id={tenant_id}/work_orders.parquet")
     async def work_orders(self):
+        assert self.tenant_id
         return [1, 2, 3]
 
     # TODO: This is required in order to define a DataAsset as a function as seen above
