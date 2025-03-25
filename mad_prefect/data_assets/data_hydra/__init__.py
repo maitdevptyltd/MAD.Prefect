@@ -10,11 +10,6 @@ T = TypeVar("T")
 
 
 class DataHydra(Generic[T]):
-    # Make DataHydra's instance signature match T, purely for intellisense
-    def __new__(cls, asset_cls: type[T], options: DataHydraOptions) -> Union[T, Self]:
-        instance = super().__new__(cls)
-        return cast(T, instance)
-
     def __init__(self, asset_cls: type[T], options: DataHydraOptions):
         self._asset_cls = asset_cls
         self._options = options

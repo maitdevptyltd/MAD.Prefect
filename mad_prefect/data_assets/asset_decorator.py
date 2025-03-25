@@ -1,7 +1,8 @@
 import datetime
 from inspect import isclass
 import os
-from typing import Callable, Literal, TypeVar
+from types import FunctionType, BuiltinFunctionType
+from typing import Any, Callable, Literal, ParamSpec, TypeVar, cast, overload
 from mad_prefect.data_assets.options import (
     ContextFactoryType,
 )
@@ -14,7 +15,8 @@ from mad_prefect.data_assets.options import (
 ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", "_asset_metadata")
 ARTIFACT_FILE_TYPES = Literal["parquet", "json", "csv"]
 
-T = TypeVar("T")
+T = TypeVar("T", bound=Any)
+P = ParamSpec("P")
 
 
 class AssetDecorator:
@@ -35,8 +37,15 @@ class AssetDecorator:
         from mad_prefect.data_assets.data_asset import DataAsset
         from mad_prefect.data_assets.data_hydra import DataHydra
 
-        def decorator(fn):
-            # If fn is a cls, it will be a DataHydra
+        # Use overloads to track IDEs and type checkers that the return type is a DataHydra or DataAsset
+        # otherwise they will not be able to determine the return type and return a union type
+
+        @overload
+        def decorator(fn: type[T]) -> DataHydra[T]: ...
+        @overload
+        def decorator(fn: Callable[P, T]) -> DataAsset[P, T]: ...
+
+        def decorator(fn: type[T] | Callable[P, T]) -> DataHydra[T] | DataAsset[P, T]:
             if isinstance(fn, type):
                 return DataHydra(
                     fn,
@@ -48,16 +57,22 @@ class AssetDecorator:
                     ),
                 )
 
-            return DataAsset(
-                fn,
-                path,
-                artifacts_dir,
-                name,
-                snapshot_artifacts,
-                artifact_filetype,
-                read_json_options,
-                read_csv_options,
-                cache_expiration,
+            # If fn is a cls, it will be a DataHydra
+            elif callable(fn):
+                return DataAsset(
+                    fn,
+                    path,
+                    artifacts_dir,
+                    name,
+                    snapshot_artifacts,
+                    artifact_filetype,
+                    read_json_options,
+                    read_csv_options,
+                    cache_expiration,
+                )
+
+            raise ValueError(
+                f"AssetDecorator cannot resolve attribute {fn} because the attribute is not a DataAsset"
             )
 
         return decorator

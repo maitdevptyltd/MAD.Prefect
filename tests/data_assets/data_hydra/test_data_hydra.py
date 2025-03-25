@@ -4,6 +4,7 @@ from mad_prefect.data_assets import asset
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_hydra import (
     DataAsset,
+    DataHydra,
 )
 from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
 
@@ -31,9 +32,19 @@ class TenantAsset(BaseModel):
     )
 
 
+@asset("otherasset.parquet")
+async def test():
+    return "yosup"
+
+
 @pytest.fixture
 def tenant_asset_hydra():
     return TenantAsset
+
+
+@pytest.fixture
+def test_asset():
+    return test
 
 
 async def test_data_hydra_proof_of_concept(tenant_asset_hydra):

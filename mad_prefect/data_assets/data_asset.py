@@ -4,7 +4,7 @@ import inspect
 import json
 from pathlib import Path
 import re
-from typing import Callable, List
+from typing import Callable, Generic, List, ParamSpec, TypeVar
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets import ASSET_METADATA_LOCATION
@@ -18,8 +18,11 @@ from mad_prefect.filesystems import get_fs
 import os
 import sys
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
-class DataAsset:
+
+class DataAsset(Generic[P, R]):
     def __init__(
         self,
         fn: Callable,
