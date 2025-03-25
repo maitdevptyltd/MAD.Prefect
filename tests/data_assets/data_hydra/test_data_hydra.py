@@ -1,5 +1,6 @@
 from functools import partial
 from typing import Protocol, dataclass_transform
+from attr import dataclass
 import pytest
 from pydantic import BaseModel, ConfigDict
 from mad_prefect.data_assets import asset
@@ -30,7 +31,7 @@ class TenantAsset:
 
 async def test_data_hydra_proof_of_concept():
     # Ensure the tenant_asset_hydra is camouflaged as the TenantAsset (intellisense for work_orders)
-    hydra_work_orders = TenantAsset.hydra()
+    hydra_work_orders = TenantAsset.work_orders
     assert isinstance(hydra_work_orders, DataHydraNeck)
 
     # When materializing a hydra's data assets, it should probably? return a DataAsset?

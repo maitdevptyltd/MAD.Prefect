@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import datetime
 import os
 from typing import Any, Callable, Literal, ParamSpec, TypeVar, overload
@@ -48,7 +49,7 @@ class AssetDecorator:
         def decorator(fn: type[T] | Callable[P, T]) -> DataHydra[T] | DataAsset[P, T]:
             if isinstance(fn, type):
                 return DataHydra(
-                    fn,
+                    dataclass(fn),
                     DataHydraOptions(
                         path=path,
                         max_concurrency=max_concurrency,
