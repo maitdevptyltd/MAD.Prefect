@@ -30,12 +30,12 @@ class DataHydra(Generic[T]):
         self._scope.binder.bind(DataHydraOptions, to=options)
 
     def __getattr__(self, name: str):
+        from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
+
         # DataHydra camoflauges itself as the asset_cls, so we must
         # proxy the attribute access to the asset_cls
         if name.startswith("_"):
-            return
-
-        from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
+            return cast(DataHydraNeck, None)
 
         # If the attr we're trying to get is a DataAsset, then we spawn a DataHydraNeck
         val, type = self.get_value_and_type(name)
