@@ -1,8 +1,6 @@
 import datetime
-from inspect import isclass
 import os
-from types import FunctionType, BuiltinFunctionType
-from typing import Any, Callable, Literal, ParamSpec, TypeVar, cast, overload
+from typing import Any, Callable, Literal, ParamSpec, TypeVar, overload
 from mad_prefect.data_assets.options import (
     ContextFactoryType,
 )
@@ -15,6 +13,8 @@ from mad_prefect.data_assets.options import (
 ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", "_asset_metadata")
 ARTIFACT_FILE_TYPES = Literal["parquet", "json", "csv"]
 
+# bound to Any to prevent it from infering type[object]* (not sure what * means)
+# this is all for intellisense
 T = TypeVar("T", bound=Any)
 P = ParamSpec("P")
 
@@ -58,7 +58,7 @@ class AssetDecorator:
                 )
 
             # If fn is a cls, it will be a DataHydra
-            elif callable(fn):
+            elif isinstance(fn, Callable):
                 return DataAsset(
                     fn,
                     path,

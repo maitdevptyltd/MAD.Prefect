@@ -32,9 +32,9 @@ class TenantAsset(BaseModel):
     )
 
 
-@asset("otherasset.parquet")
-async def test():
-    return "yosup"
+@asset("asset_with_params.parquet")
+async def asset_with_params(a: str, b: str):
+    return f"{a} {b}"
 
 
 @pytest.fixture
@@ -42,9 +42,15 @@ def tenant_asset_hydra():
     return TenantAsset
 
 
-@pytest.fixture
-def test_asset():
-    return test
+async def test_asset_with_params_has_intellisense():
+    # These should just have an intellisense error, not runtime error
+    a = await asset_with_params(
+        "a",
+        "b",
+    )
+
+    b = asset_with_params.with_arguments(a="a", b="b")
+    assert await b()
 
 
 async def test_data_hydra_proof_of_concept(tenant_asset_hydra):

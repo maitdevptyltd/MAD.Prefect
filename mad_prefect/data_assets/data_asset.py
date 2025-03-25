@@ -4,7 +4,7 @@ import inspect
 import json
 from pathlib import Path
 import re
-from typing import Callable, Generic, List, ParamSpec, TypeVar
+from typing import Callable, Generic, List, ParamSpec, TypeVar, cast
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets import ASSET_METADATA_LOCATION
@@ -16,7 +16,6 @@ from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import os
-import sys
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -25,7 +24,7 @@ R = TypeVar("R")
 class DataAsset(Generic[P, R]):
     def __init__(
         self,
-        fn: Callable,
+        fn: Callable[P, R],
         path: str,
         artifacts_dir: str = "",
         name: str | None = None,
@@ -35,7 +34,7 @@ class DataAsset(Generic[P, R]):
         read_csv_options: ReadCSVOptions | None = None,
         cache_expiration: timedelta | None = None,
     ):
-        self._fn: Callable = fn
+        self._fn = fn
         self._fn_signature: inspect.Signature = inspect.signature(fn)
         self._bound_arguments: inspect.BoundArguments | None = None
 
@@ -61,8 +60,8 @@ class DataAsset(Generic[P, R]):
         if not self._fn_signature.parameters:
             self._bind_arguments()
 
-    def with_arguments(self, *args, **kwargs):
-        asset = DataAsset(
+    def with_arguments(self, *args: P.args, **kwargs: P.kwargs):
+        asset = DataAsset[..., R](
             self._fn,
             self.path,
             self.artifacts_dir,
@@ -148,7 +147,7 @@ class DataAsset(Generic[P, R]):
 
         return self
 
-    async def __call__(self, *args, **kwargs):
+    async def __call__(self, *args: P.args, **kwargs: P.kwargs):
         if args or kwargs:
             # If arguments are passed in, create a new instance with bound arguments
             asset_with_arguments = self.with_arguments(*args, **kwargs)
@@ -260,7 +259,7 @@ class DataAsset(Generic[P, R]):
         return result_artifacts
 
     async def query(self, query_str: str | None = None):
-        result_artifact = await self()
+        result_artifact = await cast(DataAsset[..., R], self)()
 
         artifact_query = DataArtifactQuery([result_artifact])
         return await artifact_query.query(query_str)
