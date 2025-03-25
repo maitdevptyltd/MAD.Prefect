@@ -801,3 +801,19 @@ async def test_nested_function_asset_name():
 
     assert asset_1.name == "tests.mad_data_test.dw.nested_assets.nested_asset_1"
     assert asset_2.name == "tests.mad_data_test.dw.nested_assets.nested_asset_2"
+
+
+@asset("asset_with_params.parquet")
+async def asset_with_params(a: str, b: str):
+    return f"{a} {b}"
+
+
+async def test_asset_with_params_has_intellisense():
+    # These should just have an intellisense error, not runtime error
+    a = await asset_with_params(
+        "a",
+        "b",
+    )
+
+    b = asset_with_params.with_arguments(a="a", b="b")
+    assert await b()
