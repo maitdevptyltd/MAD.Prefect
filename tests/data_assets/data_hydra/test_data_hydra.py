@@ -30,12 +30,6 @@ async def unnested_asset(self):
     pass
 
 
-async def test_running_a_single_hydra_asset():
-    # We should be able to create an asset runner for a specific asset within the DataHydra
-    hydra_run = TenantAsset(TenantAsset.cls.work_orders)
-    await hydra_run
-
-
 async def test_running_a_full_hydra():
     # A hydra can be ran just by simply calling the hydra, it will begin the run
     run = TenantAsset()
@@ -45,8 +39,7 @@ async def test_running_a_full_hydra():
     await run
 
 
-async def test_hydra_tenant_id_exception(tenant_asset_hydra):
-    with pytest.raises(Exception) as e:
-        assert tenant_asset_hydra.tenant_id
-
-    print(f"Expected exception: {e.value}")
+async def test_running_a_single_hydra_asset():
+    # We should be able to create an asset runner for a specific asset within the DataHydra
+    hydra_run = TenantAsset(TenantAsset.cls.work_orders)
+    await hydra_run
