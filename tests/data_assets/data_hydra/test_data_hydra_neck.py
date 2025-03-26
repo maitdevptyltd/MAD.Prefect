@@ -6,9 +6,6 @@ from unittest.mock import MagicMock
 
 # Assuming these are in the same module where _context_to_head is defined
 # Otherwise, adjust the import paths accordingly.
-from mad_prefect.data_assets.data_hydra.data_hydra_neck import (
-    DataHydraNeck,
-)
 from mad_prefect.data_assets.data_hydra.utils import _yield_context_dicts
 
 

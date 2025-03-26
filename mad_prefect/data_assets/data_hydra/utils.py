@@ -8,8 +8,6 @@ async def _yield_context_dicts(
     context: ContextFactoryType,
     scope: Injector | None = None,
 ):
-    from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead
-
     """
     Recursively handle `ContextFactoryType` and yield DataHydraHead instances.
     """

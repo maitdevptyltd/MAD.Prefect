@@ -1,16 +1,8 @@
-from functools import partial
-from typing import Protocol, dataclass_transform
-from attr import dataclass
 import pytest
-from pydantic import BaseModel, ConfigDict
 from mad_prefect.data_assets import asset
-from mad_prefect.data_assets.data_artifact import DataArtifact
-from mad_prefect.data_assets.data_hydra import (
-    DataAsset,
-    DataHydra,
+from mad_prefect.data_assets.data_hydra.data_hydra_runner import (
+    DataHydraRun,
 )
-from mad_prefect.data_assets.data_hydra.data_hydra_neck import DataHydraNeck
-from mad_prefect.data_assets.options import DataHydraOptions
 
 
 @asset(
@@ -28,17 +20,28 @@ class TenantAsset:
         assert self.tenant_id
         return [1, 2, 3]
 
+    @asset("purchase_orders.parquet")
+    async def purchase_orders(self):
+        return [5, 6, 7]
 
-async def test_data_hydra_proof_of_concept():
-    # Ensure the tenant_asset_hydra is camouflaged as the TenantAsset (intellisense for work_orders)
-    hydra_work_orders = TenantAsset.work_orders
-    assert isinstance(hydra_work_orders, DataHydraNeck)
 
-    # When materializing a hydra's data assets, it should probably? return a DataAsset?
-    # although the DataAsset it returns won't represent a single asset but instead the
-    # cartesian product of all the data assets in the hydra
-    result = await hydra_work_orders()
-    assert isinstance(result, DataArtifact)
+@asset("unnested_asset.parquet")
+async def unnested_asset(self):
+    pass
+
+
+async def test_running_a_single_hydra_asset():
+    # We should be able to create an asset runner for a specific asset within the DataHydra
+    runner = TenantAsset()
+
+
+async def test_running_a_full_hydra():
+    # A hydra can be ran just by simply calling the hydra, it will begin the run
+    run = TenantAsset()
+    assert isinstance(run, DataHydraRun)
+
+    # We can await the run to allow the system to process through entirely
+    await run
 
 
 async def test_hydra_tenant_id_exception(tenant_asset_hydra):
