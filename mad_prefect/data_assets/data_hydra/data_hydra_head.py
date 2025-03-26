@@ -6,7 +6,7 @@ from typing import Protocol
 from injector import Injector, inject
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_asset import DataAsset
-from mad_prefect.data_assets.data_hydra.data_hydra import DataHydra
+from mad_prefect.data_assets.data_hydra import DataHydra
 from mad_prefect.data_assets.data_hydra.utils import _yield_context_dicts
 from mad_prefect.data_assets.options import DataHydraOptions
 

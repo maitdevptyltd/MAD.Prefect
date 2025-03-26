@@ -32,7 +32,8 @@ async def unnested_asset(self):
 
 async def test_running_a_single_hydra_asset():
     # We should be able to create an asset runner for a specific asset within the DataHydra
-    runner = TenantAsset()
+    hydra_run = TenantAsset(TenantAsset.cls.work_orders)
+    await hydra_run
 
 
 async def test_running_a_full_hydra():
