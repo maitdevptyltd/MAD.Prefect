@@ -1,4 +1,3 @@
-from asyncio import Queue
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
@@ -14,10 +13,11 @@ from mad_prefect.data_assets.options import DataHydraOptions
 @inject
 @dataclass(kw_only=True)
 class DataHydraHead:
-    asset: DataAsset
     scope: Injector
     hydra: DataHydra
     options: DataHydraOptions
+
+    asset: DataAsset
     context: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -45,7 +45,7 @@ class DataHydraHead:
     def cls_instance(self):
         # The DataHydra represents a class, and injects its dependencies.
         # We use cached_property to only inject the dependencies once, lazily.
-        return self.scope.call_with_injection(self.hydra.cls, kwargs=self.context)
+        return self.scope.create_object(self.hydra.cls, additional_kwargs=self.context)
 
     async def materialize(self):
         # Get the instance to the original Hydra class instance
@@ -62,6 +62,7 @@ class DataHydraHeadProducer(Protocol):
     options: DataHydraOptions
     scope: Injector
     hydra: DataHydra
+    heads = list[DataHydraHead]()
 
     async def produce_hydra_heads(self):
         from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHead
@@ -87,4 +88,5 @@ class DataHydraHeadProducer(Protocol):
                         DataHydraHead,
                         additional_kwargs={"context": ctx, "asset": attr},
                     )
+                    self.heads.append(head)
                     yield head

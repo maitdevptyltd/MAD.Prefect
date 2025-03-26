@@ -1,76 +1,88 @@
 from asyncio import Queue
 import asyncio
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Literal, TypeVar
 from injector import Injector, inject
 from mad_prefect.data_assets.data_hydra.data_hydra_head import (
     DataHydraHead,
     DataHydraHeadProducer,
 )
+from mad_prefect.data_assets.options import DataHydraOptions
 
 T = TypeVar("T")
 
 
 @inject
-@dataclass
-class DataHydraRunner:
-    scope: Injector
-
-    def __post_init__(self):
-        self.scope = self.scope.create_child_injector()
-        self.scope.binder.bind(DataHydraRunner, to=self)
-
-    def run(
-        self,
-    ):
-        return self.scope.get(DataHydraRun)
-
-
-@inject
 @dataclass(kw_only=True)
 class DataHydraRun(DataHydraHeadProducer):
-    __queue = Queue[DataHydraHead | None]()
-
     scope: Injector
-    heads = list[DataHydraHead]()
 
     def __post_init__(self):
         self.scope = self.scope.create_child_injector()
         self.scope.binder.bind(DataHydraRun, to=self)
 
-    async def run(self):
-        # As part of the run process, we have to discover the Hydra Heads.
-        generator = self.produce_hydra_heads()
+        self.state: Literal["new", "running", "complete", "error"] = "new"
+        self._future = asyncio.Future()
 
-        # At the same time, we want to consume the heads and materialize the assets
-        async with asyncio.TaskGroup() as group:
-            # Spin up a group of workers to process the heads as they come in concurrently
-            count_workers = range(self.options.max_concurrency - 1)
-            [group.create_task(self.__worker__()) for _ in count_workers]
+    def __await__(self):
+        return self._future.__await__()
 
-            # Begin discovering the heads
-            async for head in generator:
-                # Keep track of it
-                self.heads.append(head)
-                self.__queue.put_nowait(head)
 
-            # Tell the workers to turn off, no more is coming
-            [self.__queue.put_nowait(None) for _ in count_workers]
+@inject
+@dataclass
+class DataHydraRunner:
+    __queue = Queue[DataHydraHead | DataHydraRun | None]()
 
-        return self
+    scope: Injector
+    options: DataHydraOptions
+
+    def __post_init__(self):
+        self.scope = self.scope.create_child_injector()
+        self.scope.binder.bind(DataHydraRunner, to=self)
+
+        # Spin up a group of workers to process the heads as they come in concurrently
+        asyncio.gather(
+            *[
+                asyncio.create_task(self.__worker__())
+                for _ in range(self.options.max_concurrency - 1)
+            ]
+        )
+
+    def run(self):
+        run = self.scope.get(DataHydraRun)
+        self.__queue.put_nowait(run)
+
+        return run
+
+    def stop(self):
+        # Tell the workers to turn off, no more is coming
+        [self.__queue.put_nowait(None) for _ in range(self.options.max_concurrency - 1)]
 
     async def __worker__(self):
         while True:
-            head = await self.__queue.get()
+            head_or_run = await self.__queue.get()
             try:
-                if not head:
+                if not head_or_run:
                     return
 
-                await head.materialize()
+                # If its a run, enqueue its heads
+                if isinstance(head_or_run, DataHydraRun):
+
+                    if head_or_run.state == "new":
+                        head_or_run.state = "running"
+                        # Queue the heads for processing
+                        async for h in head_or_run.produce_hydra_heads():
+                            self.__queue.put_nowait(h)
+                    else:
+                        if all([x._artifact for x in head_or_run.heads]):
+                            head_or_run.state = "complete"
+                            head_or_run._future.set_result(head_or_run)
+                            continue
+
+                    self.__queue.put_nowait(head_or_run)
+                    continue
+
+                await head_or_run.materialize()
 
             finally:
                 self.__queue.task_done()
-
-    def __await__(self):
-        yield from self.run().__await__()
-        return self
