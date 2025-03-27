@@ -35,7 +35,7 @@ class DataHydraRunFactory(Protocol):
 
     @cached_property
     def runner(self):
-        from .data_hydra_runner import (
+        from . import (
             DataHydraRunner,
         )
 

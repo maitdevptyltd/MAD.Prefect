@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import TypeVar
 from injector import Injector, inject
-from mad_prefect.data_assets.data_hydra.data_hydra_run import (
+from mad_prefect.data_assets.data_hydra.runner.data_hydra_run import (
     DataHydraRun,
     DataHydraRunOptions,
 )
