@@ -3,7 +3,10 @@ import asyncio
 from dataclasses import dataclass
 from typing import TypeVar
 from injector import Injector, inject
-from mad_prefect.data_assets.data_hydra.data_hydra_run import DataHydraRun
+from mad_prefect.data_assets.data_hydra.data_hydra_run import (
+    DataHydraRun,
+    DataHydraRunOptions,
+)
 from mad_prefect.data_assets.data_hydra.data_hydra_head import (
     DataHydraHead,
 )
@@ -32,8 +35,11 @@ class DataHydraRunner:
             ]
         )
 
-    def run(self):
-        run = self.scope.get(DataHydraRun)
+    def run(self, run_options: DataHydraRunOptions | None = None):
+        run = self.scope.create_object(
+            DataHydraRun,
+            additional_kwargs={"options": run_options},
+        )
         self.__queue.put_nowait(run)
 
         return run

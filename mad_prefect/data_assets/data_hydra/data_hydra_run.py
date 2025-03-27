@@ -4,7 +4,7 @@ from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHeadProd
 from injector import Injector, inject
 import asyncio
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 
 @dataclass
@@ -16,6 +16,7 @@ class DataHydraRunOptions:
 @dataclass(kw_only=True)
 class DataHydraRun(DataHydraHeadProducer):
     scope: Injector
+    options: DataHydraRunOptions
 
     def __post_init__(self):
         self.scope = self.scope.create_child_injector()
@@ -30,7 +31,7 @@ class DataHydraRun(DataHydraHeadProducer):
 
 @inject
 @dataclass
-class DataHydraRunFactory:
+class DataHydraRunFactory(Protocol):
     scope: Injector
 
     @cached_property
@@ -42,5 +43,6 @@ class DataHydraRunFactory:
         # We have one instance of DataHydraRunner per DataHydra
         return self.scope.get(DataHydraRunner)
 
-    def __call__(self):
-        return self.runner.run()
+    def __call__(self, *assets: DataAsset):
+        run_options = DataHydraRunOptions(assets=list(assets))
+        return self.runner.run(run_options)
