@@ -1,31 +1,15 @@
 from asyncio import Queue
 import asyncio
 from dataclasses import dataclass
-from typing import Literal, TypeVar
+from typing import TypeVar
 from injector import Injector, inject
+from mad_prefect.data_assets.data_hydra.data_hydra_run import DataHydraRun
 from mad_prefect.data_assets.data_hydra.data_hydra_head import (
     DataHydraHead,
-    DataHydraHeadProducer,
 )
 from mad_prefect.data_assets.options import DataHydraOptions
 
 T = TypeVar("T")
-
-
-@inject
-@dataclass(kw_only=True)
-class DataHydraRun(DataHydraHeadProducer):
-    scope: Injector
-
-    def __post_init__(self):
-        self.scope = self.scope.create_child_injector()
-        self.scope.binder.bind(DataHydraRun, to=self)
-
-        self.state: Literal["new", "running", "complete", "error"] = "new"
-        self._future = asyncio.Future()
-
-    def __await__(self):
-        return self._future.__await__()
 
 
 @inject

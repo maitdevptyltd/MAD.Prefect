@@ -10,8 +10,8 @@ class DataHydraModule(Module):
     def configure(self, binder: Binder):
         from mad_prefect.data_assets.data_hydra import DataHydra
         from .data_hydra_head import DataHydraHead
+        from .data_hydra_run import DataHydraRun
         from .data_hydra_runner import (
-            DataHydraRun,
             DataHydraRunner,
         )
         from mad_prefect.data_assets.options import DataHydraOptions
