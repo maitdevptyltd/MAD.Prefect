@@ -1,7 +1,7 @@
 from asyncio import Queue
 import asyncio
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from typing import TypeVar
 from injector import Injector, inject, singleton
 from mad_prefect.data_assets.data_asset import DataAsset
 from mad_prefect.data_assets.data_hydra.data_hydra_head_factory import (
@@ -28,9 +28,6 @@ class DataHydraRunner:
     _queue = Queue[DataHydraHead | DataHydraRun | None]()
 
     def __post_init__(self):
-        self.scope = self.scope.create_child_injector()
-        self.scope.binder.bind(DataHydraRunner, to=self)
-
         # Spin up a group of workers to process the heads as they come in concurrently
         asyncio.gather(
             *[

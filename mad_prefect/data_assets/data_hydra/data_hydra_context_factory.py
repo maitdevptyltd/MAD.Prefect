@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 import inspect
-from typing import Protocol
 from injector import Injector, inject
 from mad_prefect.data_assets.options import ContextFactoryType, DataHydraOptions
 
@@ -9,7 +8,7 @@ from mad_prefect.data_assets.options import ContextFactoryType, DataHydraOptions
 @dataclass
 class DataHydraContextFactory:
     options: DataHydraOptions
-    scope: Injector
+    injector: Injector
 
     async def yield_contexts(self):
         """
@@ -22,7 +21,7 @@ class DataHydraContextFactory:
         """
         context_factory = self.options.context_factory
 
-        async for ctx in _yield_context_dicts(context_factory, self.scope):
+        async for ctx in _yield_context_dicts(context_factory, self.injector):
             yield ctx
 
 

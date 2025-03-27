@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Protocol
 from injector import Injector, inject
 from mad_prefect.data_assets.data_asset import DataAsset
 

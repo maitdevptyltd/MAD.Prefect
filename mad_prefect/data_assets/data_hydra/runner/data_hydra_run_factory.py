@@ -15,6 +15,8 @@ class DataHydraRunFactory:
 
     @cached_property
     def runner(self):
+        # This is a cached_property so that the DataHydraRunner is loaded lazily
+        # and thus the list[DataAssets] have been provided by the hydra
         from . import (
             DataHydraRunner,
         )

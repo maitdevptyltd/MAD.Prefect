@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import cached_property
 from typing import TypeVar
 from injector import (
     Binder,
@@ -37,6 +38,7 @@ class DataHydra(
     binder: Binder
 
     def __post_init__(self):
+        # Wrap in a dataclass so all the declares props become kwargs in its __init__
         self.binder.bind(type, to=InstanceProvider(dataclass(self.cls)))
 
         # Register the cls class so that we can inject it later
@@ -51,6 +53,7 @@ class DataHydra(
             to=self.assets,
         )
 
+    @cached_property
     def assets(self):
         result = list[DataAsset]()
 
