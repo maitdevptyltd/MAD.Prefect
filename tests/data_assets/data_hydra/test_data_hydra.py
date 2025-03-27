@@ -1,6 +1,5 @@
-import pytest
 from mad_prefect.data_assets import asset
-from mad_prefect.data_assets.data_hydra.data_hydra_runner import (
+from mad_prefect.data_assets.data_hydra.runner.data_hydra_run import (
     DataHydraRun,
 )
 
@@ -25,9 +24,17 @@ class TenantAsset:
         return [5, 6, 7]
 
 
-@asset("unnested_asset.parquet")
-async def unnested_asset(self):
-    pass
+Context = TenantAsset.cls
+
+
+@asset("unrelated_asset_with_context.parquet")
+async def unrelated_asset_with_context(context: Context):
+    assert context.tenant_id
+
+
+@asset("unrelated_asset_with_context.parquet")
+async def unrelated_asset_with_injection(tenant_id: str):
+    assert tenant_id
 
 
 async def test_running_a_full_hydra():
@@ -36,10 +43,33 @@ async def test_running_a_full_hydra():
     assert isinstance(run, DataHydraRun)
 
     # We can await the run to allow the system to process through entirely
-    await run
+    result = await run
+    assert len(result.heads) == 4
 
 
 async def test_running_a_single_hydra_asset():
     # We should be able to create an asset runner for a specific asset within the DataHydra
     hydra_run = TenantAsset(TenantAsset.cls.work_orders)
-    await hydra_run
+
+    result = await hydra_run
+    assert len(result.heads) == 2
+
+
+async def test_running_an_unrelated_asset_with_hydra_context():
+    # We should be able to associate unrelated assets with the hydra
+    hydra_run = TenantAsset(unrelated_asset_with_context)
+
+    result = await hydra_run
+    # There should be a head for each context record (two) * each asset
+    assert len(result.heads) == 2
+
+
+async def test_running_many_hydra_assets():
+    hydra_run = TenantAsset(
+        TenantAsset.cls.work_orders,
+        TenantAsset.cls.purchase_orders,
+        unrelated_asset_with_context,
+    )
+
+    result = await hydra_run
+    assert len(result.heads) == 6

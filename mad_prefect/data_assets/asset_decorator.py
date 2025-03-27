@@ -36,7 +36,7 @@ class AssetDecorator:
     ):
         # Prevent a circular reference as it references the env variable
         from mad_prefect.data_assets.data_asset import DataAsset
-        from mad_prefect.data_assets.data_hydra import DataHydra
+        from mad_prefect.data_assets.data_hydra import hydra, DataHydra
 
         # Use overloads to track IDEs and type checkers that the return type is a DataHydra or DataAsset
         # otherwise they will not be able to determine the return type and return a union type
@@ -48,8 +48,8 @@ class AssetDecorator:
 
         def decorator(fn: type[T] | Callable[P, T]) -> DataHydra[T] | DataAsset[P, T]:
             if isinstance(fn, type):
-                return DataHydra(
-                    dataclass(fn),
+                return hydra(
+                    fn,
                     DataHydraOptions(
                         path=path,
                         max_concurrency=max_concurrency,

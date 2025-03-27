@@ -1,30 +1,23 @@
-from functools import cached_property
 from typing import TypeVar
-from injector import Injector
-from typing import Generic
-from .data_hydra_run import DataHydraRunFactory
+from injector import (
+    Injector,
+)
+
+
+from mad_prefect.data_assets.data_hydra.data_hydra import DataHydra
+from mad_prefect.data_assets.options import DataHydraOptions
 
 T = TypeVar("T")
 
 
-class DataHydra(DataHydraRunFactory, Generic[T]):
-    from mad_prefect.data_assets.options import DataHydraOptions
+def hydra(cls: type[T], options: DataHydraOptions) -> DataHydra[T]:
+    # Create the root scope which has the DataHydra module register
+    scope = Injector()
+    binder = scope.binder
+    binder.bind(DataHydraOptions, to=options)
 
-    def __init__(self, cls: type[T], options: DataHydraOptions):
-        from mad_prefect.data_assets.data_hydra.data_hydra_module import DataHydraModule
-
-        self.cls = cls
-        self.options = options
-        self.scope = Injector(DataHydraModule(self))
-
-    @cached_property
-    def assets(self):
-        from mad_prefect.data_assets.data_asset import DataAsset
-
-        result = list[DataAsset]()
-
-        for _, attr in self.cls.__dict__.items():
-            if isinstance(attr, DataAsset):
-                yield attr
-
-        return result
+    # Create an instance, inject missing kwargs
+    return scope.create_object(
+        DataHydra,
+        additional_kwargs={"cls": cls},
+    )

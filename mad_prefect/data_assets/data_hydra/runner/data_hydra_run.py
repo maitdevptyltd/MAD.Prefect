@@ -18,30 +18,14 @@ class DataHydraRun:
     scope: Injector
 
     def __post_init__(self):
+        from .data_hydra_run_result import DataHydraRunResult
+
         self.scope = self.scope.create_child_injector()
         self.scope.binder.bind(DataHydraRun, to=self)
 
         self.state: Literal["new", "running", "complete", "error"] = "new"
-        self._future = asyncio.Future[DataHydraRun]()
+        self._future = asyncio.Future[DataHydraRunResult]()
+        self.result = DataHydraRunResult()
 
     def __await__(self):
         return self._future.__await__()
-
-
-@inject
-@dataclass
-class DataHydraRunFactory(Protocol):
-    scope: Injector
-
-    @cached_property
-    def runner(self):
-        from . import (
-            DataHydraRunner,
-        )
-
-        # We have one instance of DataHydraRunner per DataHydra
-        return self.scope.get(DataHydraRunner)
-
-    def __call__(self, *assets: DataAsset):
-        run_options = DataHydraRunOptions(assets=list(assets))
-        return self.runner.run(run_options)

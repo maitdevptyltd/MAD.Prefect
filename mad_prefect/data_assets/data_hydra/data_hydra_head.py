@@ -8,12 +8,10 @@ from mad_prefect.data_assets.options import DataHydraOptions
 
 
 @inject
-@dataclass(kw_only=True)
+@dataclass
 class DataHydraHead:
-    from mad_prefect.data_assets.data_hydra import DataHydra
-
     scope: Injector
-    hydra: DataHydra
+    cls: type
     options: DataHydraOptions
 
     asset: DataAsset
@@ -44,7 +42,7 @@ class DataHydraHead:
     def cls_instance(self):
         # The DataHydra represents a class, and injects its dependencies.
         # We use cached_property to only inject the dependencies once, lazily.
-        return self.scope.create_object(self.hydra.cls, additional_kwargs=self.context)
+        return self.scope.create_object(self.cls, additional_kwargs=self.context)
 
     async def materialize(self):
         # Get the instance to the original Hydra class instance

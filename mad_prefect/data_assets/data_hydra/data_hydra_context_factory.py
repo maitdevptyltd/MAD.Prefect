@@ -1,7 +1,29 @@
+from dataclasses import dataclass
 import inspect
-from typing import AsyncIterable, TypeVar
-from injector import Injector
-from mad_prefect.data_assets.options import ContextFactoryType
+from typing import Protocol
+from injector import Injector, inject
+from mad_prefect.data_assets.options import ContextFactoryType, DataHydraOptions
+
+
+@inject
+@dataclass
+class DataHydraContextFactory:
+    options: DataHydraOptions
+    scope: Injector
+
+    async def yield_contexts(self):
+        """
+        Yields DataHydraHeads based on the hydra's context_factory.
+        The context_factory may be:
+          - None
+          - A single dict
+          - A callable returning a dict, generator, async generator, or awaitable of a dict
+          - A list of any of the above
+        """
+        context_factory = self.options.context_factory
+
+        async for ctx in _yield_context_dicts(context_factory, self.scope):
+            yield ctx
 
 
 async def _yield_context_dicts(
@@ -68,20 +90,3 @@ async def _yield_context_dicts(
 
     # 5. If none of the above matched, it's an error
     raise TypeError(f"Unsupported context type: {type(context)!r}")
-
-
-T = TypeVar("T")
-
-
-async def _batched(async_iterable: AsyncIterable[T], batch_size: int):
-    batch: list[T] = []
-
-    async for item in async_iterable:
-        batch.append(item)
-
-        if len(batch) >= batch_size:
-            yield batch
-            batch = []
-
-    if batch:
-        yield batch

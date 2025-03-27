@@ -4,10 +4,6 @@ import asyncio
 from typing import AsyncGenerator, Generator, Awaitable
 from unittest.mock import MagicMock
 
-# Assuming these are in the same module where _context_to_head is defined
-# Otherwise, adjust the import paths accordingly.
-from mad_prefect.data_assets.data_hydra.utils import _yield_context_dicts
-
 
 @pytest.fixture
 def dummy_neck():
