@@ -1,6 +1,5 @@
 from functools import cached_property
 from mad_prefect.data_assets.data_asset import DataAsset
-from mad_prefect.data_assets.data_hydra.data_hydra_head import DataHydraHeadProducer
 from injector import Injector, inject
 import asyncio
 from dataclasses import dataclass
@@ -14,16 +13,16 @@ class DataHydraRunOptions:
 
 @inject
 @dataclass(kw_only=True)
-class DataHydraRun(DataHydraHeadProducer):
-    scope: Injector
+class DataHydraRun:
     options: DataHydraRunOptions
+    scope: Injector
 
     def __post_init__(self):
         self.scope = self.scope.create_child_injector()
         self.scope.binder.bind(DataHydraRun, to=self)
 
         self.state: Literal["new", "running", "complete", "error"] = "new"
-        self._future = asyncio.Future()
+        self._future = asyncio.Future[DataHydraRun]()
 
     def __await__(self):
         return self._future.__await__()
