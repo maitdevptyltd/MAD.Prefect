@@ -4,45 +4,45 @@ import inspect
 import json
 from pathlib import Path
 import re
-from typing import Callable, List
+from typing import Callable, Generic, List, ParamSpec, Protocol, TypeVar
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets import ASSET_METADATA_LOCATION
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
+from mad_prefect.data_assets.data_asset_options import DataAssetOptions
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import os
-import sys
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
-class DataAsset:
+class DataAsset(Generic[P, R]):
     def __init__(
         self,
-        fn: Callable,
+        fn: Callable[P, R],
         path: str,
-        artifacts_dir: str = "",
-        name: str | None = None,
-        snapshot_artifacts: bool = False,
-        artifact_filetype: ARTIFACT_FILE_TYPES = "json",
-        read_json_options: ReadJsonOptions | None = None,
-        read_csv_options: ReadCSVOptions | None = None,
-        cache_expiration: timedelta | None = None,
+        name: str,
+        options: DataAssetOptions,
     ):
         self._fn: Callable = fn
         self._fn_signature: inspect.Signature = inspect.signature(fn)
         self._bound_arguments: inspect.BoundArguments | None = None
 
-        self.name: str = name if name else f"{fn.__module__}.{fn.__name__}"
-        self.path: str = path
-        self.artifacts_dir: str = artifacts_dir
-        self.snapshot_artifacts: bool = snapshot_artifacts
+        self.name = name if name else f"{fn.__module__}.{fn.__name__}"
+        self.path = path
+        self.options = options
 
-        self.artifact_filetype: ARTIFACT_FILE_TYPES = artifact_filetype
-        self.cache_expiration: timedelta = cache_expiration or timedelta(0)
+        self.artifacts_dir: str = self.options.artifacts_dir
+        self.snapshot_artifacts: bool = self.options.snapshot_artifacts
+
+        self.artifact_filetype: ARTIFACT_FILE_TYPES = self.options.artifact_filetype
+        self.cache_expiration: timedelta = self.options.cache_expiration or timedelta(0)
 
         self.id = self._generate_asset_guid()
 
@@ -51,26 +51,15 @@ class DataAsset:
         self.asset_run.asset_name = self.name
         self.asset_run.asset_path = self.path
 
-        self.read_json_options = read_json_options or ReadJsonOptions()
-        self.read_csv_options = read_csv_options or ReadCSVOptions()
+        self.read_json_options = self.options.read_json_options or ReadJsonOptions()
+        self.read_csv_options = self.options.read_csv_options or ReadCSVOptions()
 
         # If the function has no parameters, bind empty arguments immediately
         if not self._fn_signature.parameters:
             self._bind_arguments()
 
     def with_arguments(self, *args, **kwargs):
-        asset = DataAsset(
-            self._fn,
-            self.path,
-            self.artifacts_dir,
-            self.name,
-            self.snapshot_artifacts,
-            self.artifact_filetype,
-            self.read_json_options,
-            self.read_csv_options,
-            self.cache_expiration,
-        )
-
+        asset = DataAsset(self._fn, self.path, self.name, self.options)
         asset._bind_arguments(*args, **kwargs)
         return asset
 
@@ -86,22 +75,26 @@ class DataAsset:
         cache_expiration: timedelta | None = None,
     ):
         # Default to the current asset's options for any None values
-        asset = DataAsset(
-            self._fn,
-            path=path or self.path,
+        options = DataAssetOptions(
             artifacts_dir=artifacts_dir or self.artifacts_dir,
-            name=name or self.name,
             snapshot_artifacts=snapshot_artifacts or self.snapshot_artifacts,
             artifact_filetype=artifact_filetype or self.artifact_filetype,
             read_json_options=read_json_options or self.read_json_options,
             read_csv_options=read_csv_options or self.read_csv_options,
             cache_expiration=cache_expiration or self.cache_expiration,
         )
+        asset = DataAsset(
+            self._fn,
+            path or self.path,
+            name or self.name,
+            options=options,
+        )
 
         # Ensure we're also passing through any bound arguments if we have them
         if self._bound_arguments:
             asset._bind_arguments(
-                *self._bound_arguments.args, **self._bound_arguments.kwargs
+                *self._bound_arguments.args,
+                **self._bound_arguments.kwargs,
             )
 
         return asset
