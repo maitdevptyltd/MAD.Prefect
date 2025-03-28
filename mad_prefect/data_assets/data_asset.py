@@ -4,7 +4,7 @@ import inspect
 import json
 from pathlib import Path
 import re
-from typing import Callable, Generic, List, ParamSpec, Protocol, TypeVar
+from typing import Callable, Generic, List, ParamSpec, TypeVar
 import duckdb
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets import ASSET_METADATA_LOCATION
@@ -30,7 +30,11 @@ class DataAsset(Generic[P, R]):
         name: str,
         options: DataAssetOptions,
     ):
-        self._fn: Callable = fn
+        from .configurators import (
+            FluentDataAssetConfigurator,
+        )
+
+        self._fn = fn
         self._fn_signature: inspect.Signature = inspect.signature(fn)
         self._bound_arguments: inspect.BoundArguments | None = None
 
@@ -58,46 +62,10 @@ class DataAsset(Generic[P, R]):
         if not self._fn_signature.parameters:
             self._bind_arguments()
 
-    def with_arguments(self, *args, **kwargs):
-        asset = DataAsset(self._fn, self.path, self.name, self.options)
-        asset._bind_arguments(*args, **kwargs)
-        return asset
-
-    def with_options(
-        self,
-        path: str | None = None,
-        artifacts_dir: str | None = None,
-        name: str | None = None,
-        snapshot_artifacts: bool | None = None,
-        artifact_filetype: ARTIFACT_FILE_TYPES | None = None,
-        read_json_options: ReadJsonOptions | None = None,
-        read_csv_options: ReadCSVOptions | None = None,
-        cache_expiration: timedelta | None = None,
-    ):
-        # Default to the current asset's options for any None values
-        options = DataAssetOptions(
-            artifacts_dir=artifacts_dir or self.artifacts_dir,
-            snapshot_artifacts=snapshot_artifacts or self.snapshot_artifacts,
-            artifact_filetype=artifact_filetype or self.artifact_filetype,
-            read_json_options=read_json_options or self.read_json_options,
-            read_csv_options=read_csv_options or self.read_csv_options,
-            cache_expiration=cache_expiration or self.cache_expiration,
-        )
-        asset = DataAsset(
-            self._fn,
-            path or self.path,
-            name or self.name,
-            options=options,
-        )
-
-        # Ensure we're also passing through any bound arguments if we have them
-        if self._bound_arguments:
-            asset._bind_arguments(
-                *self._bound_arguments.args,
-                **self._bound_arguments.kwargs,
-            )
-
-        return asset
+        # Expose the fluent configurator api
+        configurator = FluentDataAssetConfigurator(self)
+        self.with_arguments = configurator.with_arguments
+        self.with_options = configurator.with_options
 
     def _bind_arguments(self, *args, **kwargs):
         self._bound_arguments = self._fn_signature.bind(*args, **kwargs)
