@@ -25,8 +25,14 @@ def simple_asset():
     ]
 
 
+@asset("simple_asset_no_data.parquet")
+async def simple_asset_no_data():
+    return None
+
+
 async def test_simple_asset():
     result = await simple_asset()
+    await simple_asset_no_data()
     assert result
 
 
@@ -529,7 +535,9 @@ async def test_listing_asset_fetchmany():
 
     async def fetchmany_function(base_asset: DataAsset):
         query = await base_asset.query("SELECT id")
-        base_asset_name = base_asset._bound_arguments.arguments["endpoint"]
+        base_asset_name = base_asset._callable.get_bound_arguments().arguments[
+            "endpoint"
+        ]
 
         if not query:
             return

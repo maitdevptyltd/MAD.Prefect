@@ -1,5 +1,6 @@
 from datetime import timedelta
-from typing import ParamSpec, TypeVar
+from functools import partial
+from typing import Generic, ParamSpec, TypeVar
 from mad_prefect.data_assets.asset_decorator import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.data_asset import DataAsset
 from mad_prefect.data_assets.data_asset_options import DataAssetOptions
@@ -9,19 +10,21 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-class FluentDataAssetConfigurator:
+class FluentDataAssetConfigurator(Generic[P, R]):
     def __init__(self, asset: DataAsset[P, R]):
         self.asset = asset
 
     def with_arguments(self, *args, **kwargs):
-        asset = DataAsset(
-            self.asset._fn,
+        # Create a partial function which has the arguments bound
+        new_fn = partial(self.asset._fn, *args, **kwargs)
+
+        # Return a new asset based on the bound arguments
+        asset = DataAsset[P, R](
+            new_fn,
             self.asset.path,
             self.asset.name,
             self.asset.options,
         )
-
-        asset._bind_arguments(*args, **kwargs)
         return asset
 
     def with_options(
@@ -37,12 +40,13 @@ class FluentDataAssetConfigurator:
     ):
         # Default to the current asset's options for any None values
         options = DataAssetOptions(
-            artifacts_dir=artifacts_dir or self.asset.artifacts_dir,
-            snapshot_artifacts=snapshot_artifacts or self.asset.snapshot_artifacts,
-            artifact_filetype=artifact_filetype or self.asset.artifact_filetype,
-            read_json_options=read_json_options or self.asset.read_json_options,
-            read_csv_options=read_csv_options or self.asset.read_csv_options,
-            cache_expiration=cache_expiration or self.asset.cache_expiration,
+            artifacts_dir=artifacts_dir or self.asset.options.artifacts_dir,
+            snapshot_artifacts=snapshot_artifacts
+            or self.asset.options.snapshot_artifacts,
+            artifact_filetype=artifact_filetype or self.asset.options.artifact_filetype,
+            read_json_options=read_json_options or self.asset.options.read_json_options,
+            read_csv_options=read_csv_options or self.asset.options.read_csv_options,
+            cache_expiration=cache_expiration or self.asset.options.cache_expiration,
         )
         asset = DataAsset(
             self.asset._fn,
@@ -50,12 +54,5 @@ class FluentDataAssetConfigurator:
             name or self.asset.name,
             options=options,
         )
-
-        # Ensure we're also passing through any bound arguments if we have them
-        if self.asset._bound_arguments:
-            asset._bind_arguments(
-                *self.asset._bound_arguments.args,
-                **self.asset._bound_arguments.kwargs,
-            )
 
         return asset
