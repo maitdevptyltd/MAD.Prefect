@@ -2,6 +2,7 @@ from functools import cached_property
 import hashlib
 import re
 from typing import Callable, Generic, ParamSpec, TypeVar, overload
+from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_options import DataAssetOptions
 
@@ -35,13 +36,13 @@ class DataAsset(Generic[P, R]):
         self._callable = DataAssetCallable(self)
 
     @overload
-    async def __call__(self, *args: P.args, **kwds: P.kwargs): ...
+    async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> DataArtifact: ...
 
     @overload
-    async def __call__(self, *args, **kwds): ...
+    async def __call__(self, *args, **kwargs) -> DataArtifact: ...
 
-    async def __call__(self, *args: P.args, **kwds: P.kwargs):
-        return await self._callable(*args, **kwds)
+    async def __call__(self, *args: P.args, **kwargs: P.kwargs):
+        return await self._callable(*args, **kwargs)
 
     async def query(self, query_str: str | None = None):
         result_artifact = await self()
