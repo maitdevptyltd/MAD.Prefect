@@ -1,6 +1,6 @@
 from datetime import timedelta
 from functools import partial
-from typing import Generic, ParamSpec, TypeVar
+from typing import Generic, ParamSpec, TypeVar, overload
 from mad_prefect.data_assets.asset_decorator import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.data_asset import DataAsset
 from mad_prefect.data_assets.data_asset_options import DataAssetOptions
@@ -13,6 +13,12 @@ R = TypeVar("R")
 class FluentDataAssetConfigurator(Generic[P, R]):
     def __init__(self, asset: DataAsset[P, R]):
         self.asset = asset
+
+    @overload
+    def with_arguments(self, *args: P.args, **kwargs: P.kwargs): ...
+
+    @overload
+    def with_arguments(self, *args, **kwargs) -> DataAsset[P, R]: ...
 
     def with_arguments(self, *args, **kwargs):
         # Create a partial function which has the arguments bound
