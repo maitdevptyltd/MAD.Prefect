@@ -1,4 +1,7 @@
 from mad_prefect.data_assets import asset
+from mad_prefect.data_assets.configurators.fluent_data_asset_configurator import (
+    FluentDataAssetConfigurator,
+)
 
 
 @asset(
@@ -9,7 +12,8 @@ async def generic_asset(tenant_id: str, project_id: str, endpoint: str):
 
 
 async def test_with_arguments_partial():
-    work_orders = generic_asset.with_arguments(endpoint="work_orders")
+    configurator = FluentDataAssetConfigurator(generic_asset)
+    work_orders = configurator.with_arguments(endpoint="work_orders")
 
     tenant_id = "big_tenant_man"
     project_id = "glory_for_rome"
