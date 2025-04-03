@@ -73,6 +73,7 @@ class DataAssetCallable(Generic[P, R]):
 
         self.asset_run = asset_run = DataAssetRun()
         asset_run.id = self._generate_asset_iteration_guid()
+        asset_run.asset_id = asset.id
         asset_run.asset_name = asset.name
         asset_run.asset_path = asset.path
 
