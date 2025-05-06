@@ -1,3 +1,9 @@
+## 2.3.0rc0 (2025-05-06)
+
+### Feat
+
+- create EnvBlock class to automatically load API credentials from a Prefect Block or environment variables (#18)
+
 ## 2.2.0 (2025-03-04)
 
 ### Feat
