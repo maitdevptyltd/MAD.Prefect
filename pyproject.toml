@@ -32,3 +32,4 @@ tag_format = "$version"
 version_scheme = "pep440"
 version_provider = "poetry"
 update_changelog_on_bump = true
+changelog_merge_prerelease = true
