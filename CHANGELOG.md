@@ -1,3 +1,20 @@
+## 2.3.0rc1 (2025-05-13)
+
+### Feat
+
+- add overloads for with_arguments method in FluentDataAssetConfigurator for robust type hints
+
+### Fix
+
+- set asset_id in DataAssetRun during initialization
+- update __call__ method overloads in DataAsset to return DataArtifact for robust type hints
+
+### Refactor
+
+- migrate DataAsset callable logic to its own class
+- encapsulate with_options and with_arguments in confugrators
+- asset decorator as its own class, add DataAssetOptions instead of many options in data asset constructor
+
 ## 2.3.0rc0 (2025-05-06)
 
 ### Feat
