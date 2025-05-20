@@ -457,6 +457,9 @@ async def test_nested_assets_fetchmany():
 
         id_query = await listing_asset.query(f"SELECT DISTINCT {id_column}")
 
+        if id_query == None:
+            raise ValueError("fetchmany_id_list_asset is not generated properly.")
+
         # Call execute to resolve the id_query into a DuckDbPyConnection (which is a cursor)
         # as the id_query is a DuckDbPyRelation which doesn't behave like a cursor
         qry = id_query.execute()
