@@ -1,3 +1,9 @@
+## 2.3.0rc3 (2025-05-20)
+
+### Fix
+
+- add return type annotation to with_arguments method
+
 ## 2.3.0rc2 (2025-05-16)
 
 ## 2.3.0rc1 (2025-05-13)
