@@ -57,4 +57,4 @@ class DataAsset(Generic[P, R]):
 
     def _sanitize_name(self, name: str) -> str:
         # Replace any character that's not alphanumeric or a '.', underscore, or hyphen with an underscore
-        return re.sub(r"[^A-Za-z0-9_.\-]", "_", name)
+        return re.sub(r"[^A-Za-z0-9_.\-{}]", "_", name)
