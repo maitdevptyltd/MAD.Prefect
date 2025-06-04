@@ -1,3 +1,9 @@
+## 2.3.0rc4 (2025-06-04)
+
+### Fix
+
+- update regex in _sanitize_name method to allow curly braces
+
 ## 2.3.0rc3 (2025-05-20)
 
 ### Fix
