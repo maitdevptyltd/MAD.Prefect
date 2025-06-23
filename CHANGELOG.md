@@ -1,3 +1,9 @@
+## 2.3.0rc6 (2025-06-23)
+
+### Feat
+
+- Add support for parameterized queries (#21)
+
 ## 2.3.0rc5 (2025-06-23)
 
 ### Feat
