@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 import hashlib
 import inspect
+import logging
 import os
 from pathlib import Path
 from typing import Generic, ParamSpec, TypeVar, cast
@@ -17,6 +18,8 @@ from mad_prefect.data_assets.data_asset import DataAsset
 
 P = ParamSpec("P")
 R = TypeVar("R", covariant=True)
+
+logger = logging.getLogger(__name__)
 
 
 class DataAssetCallable(Generic[P, R]):
@@ -59,10 +62,16 @@ class DataAssetCallable(Generic[P, R]):
 
         if args or kwargs:
             # If arguments are passed in, create a new instance with bound arguments and call it
+            logger.debug(
+                f"Asset '{asset.name}' called with arguments, creating new configured asset instance."
+            )
             asset = asset.with_arguments(*args, **kwargs)
             return await asset()
 
         bound_args = self.get_bound_arguments()
+        logger.debug(
+            f"Bound arguments for asset '{asset.name}': {bound_args.arguments}"
+        )
 
         asset.name = asset.name.format(*self.args, **bound_args.arguments)
         asset.path = asset.path.format(*self.args, **bound_args.arguments)
@@ -70,25 +79,36 @@ class DataAssetCallable(Generic[P, R]):
             *args,
             **kwargs,
         )
+        logger.debug(f"Formatted asset name: '{asset.name}', path: '{asset.path}'")
 
         self.asset_run = asset_run = DataAssetRun()
         asset_run.id = self._generate_asset_iteration_guid()
         asset_run.asset_id = asset.id
         asset_run.asset_name = asset.name
         asset_run.asset_path = asset.path
+        logger.debug(f"Initialized DataAssetRun with id: {asset_run.id}")
 
         # Extract and set filetypes for result artifacts
         self.result_artifact_filetypes = self.get_result_artifact_filetypes(asset)
 
         # There may be multiple result artifacts if following syntax is used "bronze/customers.parquet|csv"
         self.result_artifacts = self._create_result_artifacts(asset)
+        logger.debug(
+            f"Created {len(self.result_artifacts)} result artifact(s) for paths: {[a.path for a in self.result_artifacts]}"
+        )
 
         # Prevent asset from being rematerialized inside a single session
         if asset_run and (materialized := asset_run.materialized):
+            logger.info(
+                f"Asset '{asset.name}' already materialized in this session. Returning existing artifact."
+            )
             return self.result_artifacts[0]
 
         asset_run.runtime = datetime.now(UTC)
         self.last_materialized = await self._get_last_materialized(asset)
+        logger.debug(
+            f"Last materialization time for asset '{asset.name}': {self.last_materialized}"
+        )
 
         # If data has been materialized within cache_expiration period return empty result_artifact
         if await self._cached_result(
@@ -100,9 +120,10 @@ class DataAssetCallable(Generic[P, R]):
 
         # Regenerate asset_run_id as runtime has now been set.
         asset_run.id = self._generate_asset_iteration_guid()
+        logger.debug(f"Regenerated asset run ID with runtime: {asset_run.id}")
 
-        print(
-            f"Running operations for asset_run_id: {asset_run.id}, on asset_id: {self.asset.id}, on asset: {asset.name}"
+        logger.info(
+            f"Executing asset '{asset.name}' (run_id: {asset_run.id}, asset_id: {self.asset.id})"
         )
 
         # Write metadata before processing result for troubleshooting purposes
@@ -110,9 +131,13 @@ class DataAssetCallable(Generic[P, R]):
 
         # For each fragment in the data batch, we create a new artifact
         base_artifact_path = self._get_artifact_base_path()
+        logger.debug(f"Base artifact path for fragments: {base_artifact_path}")
 
         # Clean up the old directory and delete it if we're not snapshotting
         if not asset.options.snapshot_artifacts:
+            logger.info(
+                f"Snapshotting disabled. Cleaning up old artifacts in {base_artifact_path}"
+            )
             fs = await get_fs()
             await fs.delete_path(base_artifact_path, recursive=True)
 
@@ -126,6 +151,11 @@ class DataAssetCallable(Generic[P, R]):
 
         # Collect the artifacts yielded from the materialization fn
         collector_artifacts = await collector.collect()
+
+        if not collector_artifacts:
+            logger.info(
+                f"Asset materialization for '{asset.name}' yielded no artifacts. The resulting asset will be empty."
+            )
 
         # Query each of the artifacts [filepath1, filepath2, etc] with duckdb
         artifact_query = DataArtifactQuery(
@@ -153,15 +183,17 @@ class DataAssetCallable(Generic[P, R]):
 
         await asset_run.persist()
 
-        print(
-            f"Completed operations for asset_run_id: {asset_run.id}, on asset_id: {self.asset.id}, on asset: {self.asset.name}"
+        logger.info(
+            f"Successfully executed asset '{asset.name}'. Duration: {duration.total_seconds():.2f}s (run_id: {asset_run.id})"
         )
 
         return self.result_artifacts[0]
 
     def _generate_asset_iteration_guid(self):
         hash_input = f"{self.asset.name}:{self.asset.path}:{self.asset.options.artifacts_dir}:{self.asset_run.runtime.isoformat() if self.asset_run.runtime else ''}:{str(self.args) if self.keywords else ''}"
-        return hashlib.md5(hash_input.encode()).hexdigest()
+        guid = hashlib.md5(hash_input.encode()).hexdigest()
+        logger.debug(f"Generated asset iteration GUID: {guid}")
+        return guid
 
     def get_result_artifact_filetypes(self, asset: DataAsset):
         path = Path(asset.path)
@@ -186,6 +218,7 @@ class DataAssetCallable(Generic[P, R]):
         return result_artifacts
 
     async def _get_last_materialized(self, asset: DataAsset):
+        logger.debug(f"Fetching last materialization time for asset '{asset.name}'")
         asset_metadata = await self._get_asset_metadata(asset)
 
         if not asset_metadata:
@@ -206,6 +239,7 @@ class DataAssetCallable(Generic[P, R]):
         fs = await get_fs()
 
         metadata_glob = f"{ASSET_METADATA_LOCATION}/asset_name={asset.name}/asset_id={asset.id}/**/*.json"
+        logger.debug(f"Searching for asset metadata with glob: {metadata_glob}")
 
         if fs.glob(metadata_glob):
             return duckdb.query(
@@ -218,16 +252,21 @@ class DataAssetCallable(Generic[P, R]):
         runtime: datetime,
         cache_expiration: timedelta,
     ):
+        if cache_expiration.total_seconds() <= 0:
+            return False
+
         # Check if data has been materialized within cache_expiration period
         if (
             self.last_materialized
             and (self.last_materialized > runtime - cache_expiration)
             and await result_artifact.exists()
         ):
-            print(
-                f"Retrieving cached result_artifact for asset_id: {self.asset.id} | asset: {self.asset.name}"
+            logger.info(
+                f"Cache hit for asset '{self.asset.name}' (id: {self.asset.id}). Last materialized at {self.last_materialized} which is within {cache_expiration}."
             )
             return True
+        logger.debug(f"Cache miss for asset '{self.asset.name}'.")
+        return False
 
     def _get_artifact_base_path(self):
         partition = ""

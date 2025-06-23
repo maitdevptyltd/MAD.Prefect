@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from functools import partial
 from typing import Generic, ParamSpec, TypeVar, overload
@@ -8,6 +9,8 @@ from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+logger = logging.getLogger(__name__)
 
 
 class FluentDataAssetConfigurator(Generic[P, R]):
@@ -21,6 +24,9 @@ class FluentDataAssetConfigurator(Generic[P, R]):
     def with_arguments(self, *args, **kwargs) -> DataAsset[P, R]: ...
 
     def with_arguments(self, *args, **kwargs):
+        logger.debug(
+            f"Configuring asset '{self.asset.name}' with new arguments. Args: {args}, Kwargs: {kwargs}"
+        )
         # Create a partial function which has the arguments bound
         new_fn = partial(self.asset._fn, *args, **kwargs)
 
@@ -44,6 +50,7 @@ class FluentDataAssetConfigurator(Generic[P, R]):
         read_csv_options: ReadCSVOptions | None = None,
         cache_expiration: timedelta | None = None,
     ):
+        logger.debug(f"Configuring asset '{self.asset.name}' with new options.")
         # Default to the current asset's options for any None values
         options = DataAssetOptions(
             artifacts_dir=artifacts_dir or self.asset.options.artifacts_dir,

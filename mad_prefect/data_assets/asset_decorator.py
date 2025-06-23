@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 from typing import Any, Callable, Literal, ParamSpec, TypeVar
 from mad_prefect.data_assets.options import (
@@ -8,6 +9,8 @@ from mad_prefect.data_assets.options import (
 
 ASSET_METADATA_LOCATION = os.getenv("ASSET_METADATA_LOCATION", "_asset_metadata")
 ARTIFACT_FILE_TYPES = Literal["parquet", "json", "csv"]
+
+logger = logging.getLogger(__name__)
 
 # bound to Any to prevent it from infering type[object]* (not sure what * means)
 # this is all for intellisense
@@ -49,6 +52,9 @@ class AssetDecorator:
         def decorator(fn: Callable[P, T]) -> DataAsset[P, T]:
             nonlocal name
             name = name if name else f"{fn.__module__}.{fn.__name__}"
+            logger.debug(
+                f"Creating DataAsset '{name}' for path '{path}' with options: {options}"
+            )
 
             if isinstance(fn, Callable):
                 return DataAsset(fn, path, name, options=options)
