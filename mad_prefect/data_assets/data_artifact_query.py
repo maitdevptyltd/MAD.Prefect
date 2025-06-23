@@ -21,7 +21,7 @@ class DataArtifactQuery:
         self.read_json_options = read_json_options or ReadJsonOptions()
         self.read_csv_options = read_csv_options or ReadCSVOptions()
 
-    async def query(self, query_str: str | None = None):
+    async def query(self, query_str: str | None = None, params: object | None = None):
         await register_mad_protocol()
 
         # Get the globs for any artifacts which exist
@@ -60,7 +60,7 @@ class DataArtifactQuery:
         if query_str:
             final_query_string = f"FROM artifact_query {query_str}"
             logger.debug(f"Executing final query: {final_query_string}")
-            return duckdb.query(final_query_string)
+            return duckdb.query(final_query_string, params=params)
 
         logger.debug("Executing base artifact query.")
         return artifact_query

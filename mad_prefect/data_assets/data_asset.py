@@ -52,8 +52,9 @@ class DataAsset(Generic[P, R]):
         )
         return await self._callable(*args, **kwargs)
 
-    async def query(self, query_str: str | None = None):
+    async def query(self, query_str: str | None = None, params: object | None = None):
         logger.info(f"Querying data asset '{self.name}' with query: '{query_str}'")
+        
         result_artifact = await self()
         artifact_query = DataArtifactQuery(
             [result_artifact],
@@ -61,7 +62,7 @@ class DataAsset(Generic[P, R]):
             self.options.read_csv_options,
         )
 
-        return await artifact_query.query(query_str)
+        return await artifact_query.query(query_str, params=params)
 
     @cached_property
     def id(self):

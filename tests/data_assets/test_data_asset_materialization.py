@@ -812,3 +812,70 @@ async def test_nested_function_asset_name():
 
     assert asset_1.name == "tests.mad_data_test.dw.nested_assets.nested_asset_1"
     assert asset_2.name == "tests.mad_data_test.dw.nested_assets.nested_asset_2"
+
+
+async def test_query_with_parameters():
+    @asset("inventory_for_parameter_test.json")
+    def inventory_asset():
+        return [
+            {"id": 1, "product": "Laptop", "stock": 15},
+            {"id": 2, "product": "Mouse", "stock": 120},
+            {"id": 3, "product": "Keyboard", "stock": 75},
+            {"id": 4, "product": "Monitor", "stock": 30},
+        ]
+
+    # Materialize the asset to create the file.
+    inventory_artifact = await inventory_asset()
+    assert inventory_artifact
+
+    # The query_str includes the SELECT, which is what the library code expects.
+    query_str = "SELECT * WHERE stock > ?"
+    params = [50]
+
+    # This will result in the correct final DuckDB query:
+    # FROM artifact_query SELECT * WHERE stock > ?
+    result_query = await inventory_artifact.query(query_str, params=params)
+    assert result_query
+
+    # Fetch and check the results.
+    filtered_data = result_query.fetchall()
+    assert len(filtered_data) == 2
+
+    products = sorted([row[1] for row in filtered_data])
+    assert products == ["Keyboard", "Mouse"]
+
+
+async def test_query_with_named_parameters_in_list():
+    @asset("inventory_for_named_param_test.json")
+    def inventory_asset():
+        return [
+            {"id": 1, "product": "Laptop", "stock": 15},
+            {"id": 2, "product": "Mouse", "stock": 120},
+            {"id": 3, "product": "Keyboard", "stock": 75},
+            {"id": 4, "product": "Monitor", "stock": 30},
+        ]
+
+    # This is the list of IDs we want to select
+    ids_to_find = [2, 4]
+
+    # Materialize the asset to create the file
+    inventory_artifact = await inventory_asset()
+    assert inventory_artifact
+
+    # The query string uses the "$ids" named parameter
+    query_str = "SELECT * WHERE id IN $ids"
+
+    # The params are passed as a dictionary, mapping the name to the list
+    params = {"ids": ids_to_find}
+
+    # This will execute the final query:
+    # FROM artifact_query SELECT * WHERE id IN $ids
+    result_query = await inventory_artifact.query(query_str, params=params)
+    assert result_query
+
+    # Fetch the results and check them
+    filtered_data = result_query.fetchall()
+    assert len(filtered_data) == 2
+
+    products = sorted([row[1] for row in filtered_data])
+    assert products == ["Monitor", "Mouse"]

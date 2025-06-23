@@ -320,14 +320,14 @@ class DataArtifact:
                 )
                 yield batch_data
 
-    async def query(self, query_str: str | None = None):
+    async def query(self, query_str: str | None = None, params: object | None = None):
         from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 
         logger.info(f"Querying artifact: {self.path}")
         artifact_query = DataArtifactQuery(
             [self], self.read_json_options, self.read_csv_options
         )
-        return await artifact_query.query(query_str)
+        return await artifact_query.query(query_str, params=params)
 
     async def exists(self):
         fs = await get_fs()
