@@ -1,3 +1,9 @@
+## 2.3.0rc7 (2025-09-29)
+
+### Feat
+
+- update Python and dependency version constraints in pyproject.toml
+
 ## 2.3.0rc6 (2025-06-23)
 
 ### Feat
