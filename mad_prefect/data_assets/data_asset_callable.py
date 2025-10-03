@@ -12,6 +12,7 @@ from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
+from mad_prefect.data_assets.asset_template_formatter import AssetTemplateFormatter
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 from mad_prefect.data_assets.data_asset import DataAsset
@@ -73,12 +74,10 @@ class DataAssetCallable(Generic[P, R]):
             f"Bound arguments for asset '{asset.name}': {bound_args.arguments}"
         )
 
-        asset.name = asset.name.format(*self.args, **bound_args.arguments)
-        asset.path = asset.path.format(*self.args, **bound_args.arguments)
-        asset.options.artifacts_dir = asset.options.artifacts_dir.format(
-            *args,
-            **kwargs,
-        )
+        formatter = AssetTemplateFormatter(self.args, bound_args)
+        asset.name = formatter.format(asset.name) or ""
+        asset.path = formatter.format(asset.path) or ""
+        asset.options.artifacts_dir = formatter.format(asset.options.artifacts_dir) or ""
         logger.debug(f"Formatted asset name: '{asset.name}', path: '{asset.path}'")
 
         self.asset_run = asset_run = DataAssetRun()
@@ -98,7 +97,7 @@ class DataAssetCallable(Generic[P, R]):
         )
 
         # Prevent asset from being rematerialized inside a single session
-        if asset_run and (materialized := asset_run.materialized):
+        if asset_run and asset_run.materialized:
             logger.info(
                 f"Asset '{asset.name}' already materialized in this session. Returning existing artifact."
             )
