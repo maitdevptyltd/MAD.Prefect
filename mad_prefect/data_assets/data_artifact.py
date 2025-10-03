@@ -79,7 +79,8 @@ class DataArtifact:
 
             register_fsspec_filesystem(fs._fs)
             logger.debug(f"Persisting DuckDB relation to {protocol}://{path}")
-            duckdb.execute(f"COPY d TO '{protocol}://{path}'")
+            _d = self.data
+            duckdb.execute(f"COPY _d TO '{protocol}://{path}'")
         else:
             if self.filetype == "json":
                 await self._persist_json()
