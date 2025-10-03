@@ -1,6 +1,7 @@
 from typing import cast
 import duckdb
 import fsspec
+import os
 import pytest
 import weakref
 
@@ -14,12 +15,17 @@ async def sample_parquet(tmp_path, monkeypatch):
     original_fs = mad_filesystems._get_fs_result
     original_url = mad_filesystems.FILESYSTEM_URL
     original_block_name = mad_filesystems.FILESYSTEM_BLOCK_NAME
+    original_env_url = os.environ.get("FILESYSTEM_URL")
+    original_env_block = os.environ.get("FILESYSTEM_BLOCK_NAME")
+    import mad_prefect.duckdb as mad_duckdb
+    original_mad_fs_ref = mad_duckdb._mad_filesystem_ref
 
     mad_filesystems.FILESYSTEM_URL = f"file://{tmp_path}"
     mad_filesystems.FILESYSTEM_BLOCK_NAME = None
     monkeypatch.setenv("FILESYSTEM_URL", mad_filesystems.FILESYSTEM_URL)
     monkeypatch.delenv("FILESYSTEM_BLOCK_NAME", raising=False)
     mad_filesystems._get_fs_result = None
+    mad_duckdb._mad_filesystem_ref = None
 
     if duckdb.filesystem_is_registered("mad"):
         duckdb.unregister_filesystem("mad")
@@ -29,6 +35,9 @@ async def sample_parquet(tmp_path, monkeypatch):
     sample_path = tmp_path / "sample1.parquet"
     if sample_path.exists():
         sample_path.unlink()
+
+    fs = await mad_filesystems.get_fs()
+    fs.mkdirs("", exist_ok=True)
 
     duckdb.sql(
         """
@@ -47,6 +56,16 @@ async def sample_parquet(tmp_path, monkeypatch):
     mad_filesystems._get_fs_result = original_fs
     mad_filesystems.FILESYSTEM_URL = original_url
     mad_filesystems.FILESYSTEM_BLOCK_NAME = original_block_name
+    mad_duckdb._mad_filesystem_ref = original_mad_fs_ref
+    if original_env_url is not None:
+        monkeypatch.setenv("FILESYSTEM_URL", original_env_url)
+    else:
+        monkeypatch.delenv("FILESYSTEM_URL", raising=False)
+
+    if original_env_block is not None:
+        monkeypatch.setenv("FILESYSTEM_BLOCK_NAME", original_env_block)
+    else:
+        monkeypatch.delenv("FILESYSTEM_BLOCK_NAME", raising=False)
 
 
 async def test_mad_filesystem_queries_file(sample_parquet):
