@@ -1,3 +1,11 @@
+## 2.3.0rc9 (2025-10-03)
+
+### Fix
+
+- allow duckdb >= 1.3 by safe_truthy checks on duckdbpyrelations
+- ensure DuckDB protocol reuses filesystem and prevent unnecessary registrations
+- memoize duckdb filesystem registration to prevent leaks
+
 ## 2.3.0rc8 (2025-10-03)
 
 ### Fix
