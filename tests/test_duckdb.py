@@ -1,12 +1,5 @@
-import asyncio
 import duckdb
-import mad_prefect.filesystems
-import pytest
 import duckdb
-import json
-
-# Override the environment variable before importing register_mad_filesystem
-mad_prefect.filesystems.FILESYSTEM_URL = "file://./tests"
 from mad_prefect.duckdb import register_mad_protocol
 
 
