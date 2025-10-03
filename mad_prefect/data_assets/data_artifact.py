@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.data_assets.utils import yield_data_batches
-from mad_prefect.duckdb import register_mad_protocol
+from mad_prefect.duckdb import register_mad_protocol, register_fsspec_filesystem
 from mad_prefect.filesystems import get_fs
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -76,9 +76,8 @@ class DataArtifact:
             fs.mkdirs(os.path.dirname(self.path), exist_ok=True)
 
             path = fs._resolve_path(self.path)
-            d = self.data
 
-            duckdb.register_filesystem(cast(str, fs._fs))
+            register_fsspec_filesystem(fs._fs)
             logger.debug(f"Persisting DuckDB relation to {protocol}://{path}")
             duckdb.execute(f"COPY d TO '{protocol}://{path}'")
         else:
@@ -145,9 +144,9 @@ class DataArtifact:
 
                 writer.write_all(next_entity)
                 next_entity = await anext(entities)
-        except StopAsyncIteration as e:
+        except StopAsyncIteration:
             pass
-        except Exception as e:
+        except Exception:
             raise
         finally:
             if writer:
@@ -213,9 +212,9 @@ class DataArtifact:
 
                 writer.write(table_or_batch)
                 next_entity = await anext(entities)
-        except StopAsyncIteration as e:
+        except StopAsyncIteration:
             pass
-        except Exception as e:
+        except Exception:
             raise
         finally:
             if writer:
@@ -304,7 +303,7 @@ class DataArtifact:
                         try:
                             batch = reader.read_next_batch()
                             yield batch
-                        except StopIteration as stop:
+                        except StopIteration:
                             break
                 finally:
                     reader.close()

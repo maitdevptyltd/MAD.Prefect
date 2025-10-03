@@ -1,8 +1,10 @@
 import duckdb
+import fsspec
 import pytest
+import weakref
 
 from mad_prefect import filesystems as mad_filesystems
-from mad_prefect.duckdb import register_mad_protocol
+from mad_prefect.duckdb import register_mad_protocol, register_fsspec_filesystem
 
 
 @pytest.fixture()
@@ -80,3 +82,30 @@ async def test_overwriting_existing_file(sample_parquet):
     copied_count = copied_row[0]
 
     assert copied_count == 3
+
+
+def test_register_fsspec_filesystem_is_idempotent(monkeypatch, tmp_path):
+    from mad_prefect import duckdb as mad_duckdb
+    from mad_prefect.filesystems import FsspecFileSystem
+
+    monkeypatch.setattr(mad_duckdb, "_global_registered_filesystem_ids", set())
+    monkeypatch.setattr(
+        mad_duckdb,
+        "_connection_registered_filesystems",
+        weakref.WeakKeyDictionary(),
+    )
+
+    filesystem = FsspecFileSystem(basepath=f"file://{tmp_path}")
+    underlying_fs = filesystem._fs
+
+    calls: list[fsspec.AbstractFileSystem] = []
+
+    def fake_register(fs):
+        calls.append(fs)
+
+    monkeypatch.setattr(duckdb, "register_filesystem", fake_register)
+
+    register_fsspec_filesystem(underlying_fs)
+    register_fsspec_filesystem(underlying_fs)
+
+    assert len(calls) == 1
