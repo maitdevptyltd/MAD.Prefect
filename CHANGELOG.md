@@ -1,3 +1,9 @@
+## 2.3.0rc8 (2025-10-03)
+
+### Fix
+
+- resolve nested data asset template placeholders
+
 ## 2.3.0rc7 (2025-09-29)
 
 ### Feat
