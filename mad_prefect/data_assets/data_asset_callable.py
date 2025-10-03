@@ -13,6 +13,7 @@ from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollecto
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
 from mad_prefect.data_assets.asset_template_formatter import AssetTemplateFormatter
+from mad_prefect.data_assets.utils import safe_truthy
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 from mad_prefect.data_assets.data_asset import DataAsset
@@ -77,7 +78,9 @@ class DataAssetCallable(Generic[P, R]):
         formatter = AssetTemplateFormatter(self.args, bound_args)
         asset.name = formatter.format(asset.name) or ""
         asset.path = formatter.format(asset.path) or ""
-        asset.options.artifacts_dir = formatter.format(asset.options.artifacts_dir) or ""
+        asset.options.artifacts_dir = (
+            formatter.format(asset.options.artifacts_dir) or ""
+        )
         logger.debug(f"Formatted asset name: '{asset.name}', path: '{asset.path}'")
 
         self.asset_run = asset_run = DataAssetRun()
@@ -220,7 +223,7 @@ class DataAssetCallable(Generic[P, R]):
         logger.debug(f"Fetching last materialization time for asset '{asset.name}'")
         asset_metadata = await self._get_asset_metadata(asset)
 
-        if not asset_metadata:
+        if not safe_truthy(asset_metadata):
             return
 
         last_materialized_query = duckdb.query(

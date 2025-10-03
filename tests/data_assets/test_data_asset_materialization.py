@@ -12,6 +12,7 @@ from datetime import datetime, date
 import pandas as pd
 from pydantic import BaseModel
 from mad_prefect.data_assets.options import ReadJsonOptions
+from mad_prefect.data_assets.utils import safe_truthy
 from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 
@@ -44,7 +45,7 @@ async def test_when_data_asset_yields_another_data_asset():
         yield more_numbers
 
     composed_asset_query = await composed_asset.query("SELECT COUNT(*) c")
-    assert composed_asset_query
+    assert safe_truthy(composed_asset_query)
 
     count_query_result = composed_asset_query.fetchone()
     assert count_query_result
@@ -74,7 +75,7 @@ async def test_when_data_asset_yields_multiple_lists():
         ]
 
     multiple_lists_asset_query = await multiple_lists_asset.query("SELECT COUNT(*) c")
-    assert multiple_lists_asset_query
+    assert safe_truthy(multiple_lists_asset_query)
     count_query_result = multiple_lists_asset_query.fetchone()
     assert count_query_result
 
@@ -117,7 +118,7 @@ async def test_when_data_asset_schema_evolution():
     schema_evolution_asset_query = await schema_evolution_asset.query(
         "SELECT COUNT(*) c"
     )
-    assert schema_evolution_asset_query
+    assert safe_truthy(schema_evolution_asset_query)
     count_query_result = schema_evolution_asset_query.fetchone()
 
     assert count_query_result
@@ -157,7 +158,7 @@ async def test_when_data_asset_contains_empty_struct():
         ]
 
     empty_struct_asset_query = await empty_struct_asset.query("SELECT COUNT(*) c")
-    assert empty_struct_asset_query
+    assert safe_truthy(empty_struct_asset_query)
     count_query_result = empty_struct_asset_query.fetchone()
 
     assert count_query_result
@@ -173,7 +174,7 @@ async def test_when_data_asset_yields_no_data():
 
     empty_asset_query = await empty_asset.query("SELECT *")
 
-    if not empty_asset_query:
+    if not safe_truthy(empty_asset_query):
         return
 
     count_query_result = duckdb.query("SELECT COUNT(*) c").fetchone()
@@ -214,7 +215,7 @@ async def test_nested_structs_with_many_keys_should_not_cast_to_string():
     # Query the composed asset to check its contents
     composed_query = await dict_array_asset_1.query("SELECT *")
 
-    assert composed_query
+    assert safe_truthy(composed_query)
 
     # The second column is named data
     assert composed_query.description[1][0] == "data"
@@ -234,7 +235,7 @@ async def test_materialize_artifact_with_decimal():
         ]
 
     decimal_asset_query = await decimal_asset.query("SELECT COUNT(*) c")
-    assert decimal_asset_query
+    assert safe_truthy(decimal_asset_query)
     count_query_result = decimal_asset_query.fetchone()
     assert count_query_result
 
@@ -243,7 +244,7 @@ async def test_materialize_artifact_with_decimal():
 
     # Verify that the decimal values are correctly stored and retrieved
     decimal_values_query = await decimal_asset.query("SELECT count")
-    assert decimal_values_query
+    assert safe_truthy(decimal_values_query)
     decimal_values = [row[0] for row in decimal_values_query.fetchall()]
     assert decimal_values == [1.1, 5.5, 10.75]
 
@@ -270,7 +271,7 @@ async def test_materialize_artifact_with_datetime():
         ]
 
     datetime_asset_query = await datetime_asset.query("SELECT COUNT(*) c")
-    assert datetime_asset_query
+    assert safe_truthy(datetime_asset_query)
     count_query_result = datetime_asset_query.fetchone()
     assert count_query_result
 
@@ -279,7 +280,7 @@ async def test_materialize_artifact_with_datetime():
 
     # Verify that the datetime values are correctly stored and retrieved
     datetime_values_query = await datetime_asset.query("SELECT timestamp, date")
-    assert datetime_values_query
+    assert safe_truthy(datetime_values_query)
     datetime_values = [(row[0], row[1]) for row in datetime_values_query.fetchall()]
     assert datetime_values == [
         (datetime(2023, 1, 1, 12, 0, 0), date(2023, 1, 1)),
@@ -305,7 +306,7 @@ async def test_materialize_artifact_with_pandas_dataframe():
     pandas_dataframe_asset_query = await pandas_dataframe_asset.query(
         "SELECT COUNT(*) c"
     )
-    assert pandas_dataframe_asset_query
+    assert safe_truthy(pandas_dataframe_asset_query)
     count_query_result = pandas_dataframe_asset_query.fetchone()
     assert count_query_result
 
@@ -314,7 +315,7 @@ async def test_materialize_artifact_with_pandas_dataframe():
 
     # Verify that the dataframe values are correctly stored and retrieved
     dataframe_values_query = await pandas_dataframe_asset.query("SELECT count, id")
-    assert dataframe_values_query
+    assert safe_truthy(dataframe_values_query)
     dataframe_values = [(row[0], row[1]) for row in dataframe_values_query.fetchall()]
     expected_values = [
         (1, UUID("951c58e4-b9a4-4478-883e-22760064e416")),
@@ -337,7 +338,7 @@ async def test_materialize_artifact_with_inner_struct():
 
     inner_struct_asset_query = await inner_struct_asset.query("SELECT COUNT(*) c")
 
-    assert inner_struct_asset_query
+    assert safe_truthy(inner_struct_asset_query)
 
     count_query_result = inner_struct_asset_query.fetchone()
     assert count_query_result
@@ -347,7 +348,7 @@ async def test_materialize_artifact_with_inner_struct():
 
     # Verify that the id and data columns exist and data is of type MAP(STRING, STRING)
     inner_struct_asset_query = await inner_struct_asset.query("SELECT *")
-    assert inner_struct_asset_query
+    assert safe_truthy(inner_struct_asset_query)
 
     # Check that the id column exists
     assert "id" in [desc[0] for desc in inner_struct_asset_query.description]
@@ -377,7 +378,7 @@ async def test_json_artifacts_with_different_timestamp_precisions_are_deserializ
         ]
 
     datetime_asset_query = await datetime_asset_precision.query("SELECT COUNT(*) c")
-    assert datetime_asset_query
+    assert safe_truthy(datetime_asset_query)
     count_query_result = datetime_asset_query.fetchone()
     assert count_query_result
 
@@ -389,11 +390,10 @@ async def test_json_artifacts_with_different_timestamp_precisions_are_deserializ
         "SELECT timestamp, timestamp_ez"
     )
 
-    assert datetime_values_query
+    assert safe_truthy(datetime_values_query)
     assert datetime_values_query.types[0] == "timestamp"
     assert datetime_values_query.types[1] == "timestamp"
 
-    assert datetime_values_query
     datetime_values = [row[0] for row in datetime_values_query.fetchall()]
     assert datetime_values == [
         datetime(2023, 1, 1, 12, 5, 50, 99),
@@ -542,7 +542,7 @@ async def test_listing_asset_fetchmany():
             "endpoint"
         ]
 
-        if not query:
+        if not safe_truthy(query):
             return
 
         BATCH_SIZE = 10
@@ -602,7 +602,7 @@ async def test_details_asset_fetchmany():
             f"SELECT DISTINCT id FROM 'mad://non_asset_fetchmany_base_{endpoint}.parquet'"
         )
 
-        if not query:
+        if not safe_truthy(query):
             return
 
         BATCH_SIZE = 10
@@ -670,7 +670,7 @@ async def test_materialize_artifact_csv():
 
     # Use the artifact's query method to count rows (DuckDB can handle CSV)
     csv_artifact_query = await csv_artifact.query("SELECT COUNT(*) c")
-    assert csv_artifact_query
+    assert safe_truthy(csv_artifact_query)
 
     count_query_result = csv_artifact_query.fetchone()
     assert count_query_result
@@ -704,7 +704,7 @@ async def test_csv_artifacts_with_hive_partitions():
 
     # Use the artifact's query method to count rows (DuckDB can handle CSV)
     count_csv_artifact_query = await csv_artifact.query("SELECT COUNT(*) c")
-    assert count_csv_artifact_query
+    assert safe_truthy(count_csv_artifact_query)
 
     count_query_result = count_csv_artifact_query.fetchone()
     assert count_query_result
@@ -714,7 +714,7 @@ async def test_csv_artifacts_with_hive_partitions():
 
     csv_artifact_query = await csv_artifact.query()
 
-    csv_columns = csv_artifact_query.columns if csv_artifact_query else []
+    csv_columns = csv_artifact_query.columns if safe_truthy(csv_artifact_query) else []
 
     assert "year" in csv_columns
     assert "month" in csv_columns
@@ -752,7 +752,7 @@ async def test_pydantic_model_asset():
 
         # Test the outputs of the model
         parent_model = await model_asset.query()
-        assert parent_model
+        assert safe_truthy(parent_model)
 
         parent_model_data = parent_model.fetchone()
         assert parent_model_data
@@ -778,7 +778,7 @@ async def test_pydantic_model_asset():
         # Test the outputs of the nested model
         child_model = await model_asset.query("SELECT UNNEST(child)")
 
-        assert child_model
+        assert safe_truthy(child_model)
 
         child_model_data = child_model.fetchone()
         assert child_model_data
@@ -807,10 +807,7 @@ async def test_module_function_asset_name():
     dynamic_elephants = asset("dynamic_elephants.json")(nested_modular_name_asset)
 
     assert ferocious_penguins.name == f"{module_name}.modular_name_asset_function"
-    assert (
-        dynamic_elephants.name
-        == f"{nested_module_name}.modular_name_asset_function"
-    )
+    assert dynamic_elephants.name == f"{nested_module_name}.modular_name_asset_function"
 
 
 async def test_nested_function_asset_name():
@@ -867,7 +864,7 @@ async def test_query_with_parameters():
     # This will result in the correct final DuckDB query:
     # FROM artifact_query SELECT * WHERE stock > ?
     result_query = await inventory_artifact.query(query_str, params=params)
-    assert result_query
+    assert safe_truthy(result_query)
 
     # Fetch and check the results.
     filtered_data = result_query.fetchall()
@@ -903,7 +900,7 @@ async def test_query_with_named_parameters_in_list():
     # This will execute the final query:
     # FROM artifact_query SELECT * WHERE id IN $ids
     result_query = await inventory_artifact.query(query_str, params=params)
-    assert result_query
+    assert safe_truthy(result_query)
 
     # Fetch the results and check them
     filtered_data = result_query.fetchall()

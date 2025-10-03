@@ -9,7 +9,7 @@ import pandas as pd
 from pydantic import TypeAdapter
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
-from mad_prefect.data_assets.utils import yield_data_batches
+from mad_prefect.data_assets.utils import safe_truthy, yield_data_batches
 from mad_prefect.duckdb import register_mad_protocol, register_fsspec_filesystem
 from mad_prefect.filesystems import get_fs
 import pyarrow as pa
@@ -337,14 +337,4 @@ class DataArtifact:
         return self.persisted
 
     def _truthy(self, data):
-        if isinstance(data, pd.DataFrame):
-            if data.empty:
-                return False
-        # duckdb hangs with the not self.data check, so make sure self.data isn't
-        # a duckdb pyrelation before checking self.data
-        elif isinstance(data, duckdb.DuckDBPyRelation):
-            pass
-        elif not data:
-            return False
-
-        return True
+        return safe_truthy(data)
