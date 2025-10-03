@@ -1,0 +1,5 @@
+{
+  "typeCheckingMode": "basic",
+  "include": ["mad_prefect", "tests"],
+  "reportUnusedVariable": "error"
+}
