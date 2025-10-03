@@ -787,20 +787,52 @@ async def test_pydantic_model_asset():
 
 
 async def test_module_function_asset_name():
-    from tests.mad_data_test.dw import ferocious_penguins
-    from tests.mad_data_test.dw.test_endpoint import dynamic_elephants
+    module_name = "tests.mad_data_test.dw"
+    nested_module_name = "tests.mad_data_test.dw.test_endpoint"
 
-    assert (
-        ferocious_penguins.name == "tests.mad_data_test.dw.modular_name_asset_function"
-    )
+    async def modular_name_asset():
+        return None
+
+    modular_name_asset.__name__ = "modular_name_asset_function"
+    modular_name_asset.__module__ = module_name
+
+    ferocious_penguins = asset("ferocious_penguins.json")(modular_name_asset)
+
+    async def nested_modular_name_asset():
+        return None
+
+    nested_modular_name_asset.__name__ = "modular_name_asset_function"
+    nested_modular_name_asset.__module__ = nested_module_name
+
+    dynamic_elephants = asset("dynamic_elephants.json")(nested_modular_name_asset)
+
+    assert ferocious_penguins.name == f"{module_name}.modular_name_asset_function"
     assert (
         dynamic_elephants.name
-        == "tests.mad_data_test.dw.test_endpoint.modular_name_asset_function"
+        == f"{nested_module_name}.modular_name_asset_function"
     )
 
 
 async def test_nested_function_asset_name():
-    from tests.mad_data_test.dw.nested_assets import nested_assets_func
+    module_name = "tests.mad_data_test.dw.nested_assets"
+
+    def nested_assets_func():
+        async def nested_asset_1():
+            return 1
+
+        nested_asset_1.__name__ = "nested_asset_1"
+        nested_asset_1.__module__ = module_name
+
+        async def nested_asset_2():
+            return 2
+
+        nested_asset_2.__name__ = "nested_asset_2"
+        nested_asset_2.__module__ = module_name
+
+        asset_1 = asset("nested_asset_1.json")(nested_asset_1)
+        asset_2 = asset("nested_asset_2.json")(nested_asset_2)
+
+        return [asset_1, asset_2]
 
     assets = nested_assets_func()
 
@@ -810,8 +842,8 @@ async def test_nested_function_asset_name():
     assert isinstance(asset_1, DataAsset)
     assert isinstance(asset_2, DataAsset)
 
-    assert asset_1.name == "tests.mad_data_test.dw.nested_assets.nested_asset_1"
-    assert asset_2.name == "tests.mad_data_test.dw.nested_assets.nested_asset_2"
+    assert asset_1.name == f"{module_name}.nested_asset_1"
+    assert asset_2.name == f"{module_name}.nested_asset_2"
 
 
 async def test_query_with_parameters():
