@@ -30,6 +30,7 @@ class DataAssetRun(BaseModel):
         error: str | None = None,
         artifact_paths: Sequence[str] | None = None,
         asset_signature: str | None = None,
+        update_manifest: bool = True,
     ):
         fs = await get_fs()
         path = f"{ASSET_METADATA_LOCATION}/asset_name={self.asset_name}/asset_id={self.asset_id}/asset_run_id={self.id}/metadata.json"
@@ -41,6 +42,9 @@ class DataAssetRun(BaseModel):
             path,
             self,
         )
+
+        if not update_manifest:
+            return
 
         if not (self.asset_name and self.asset_id and self.id):
             return

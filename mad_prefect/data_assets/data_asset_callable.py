@@ -135,6 +135,7 @@ class DataAssetCallable(Generic[P, R]):
         await asset_run.persist(
             asset_signature=asset.id,
             status=ManifestRunStatus.UNKNOWN,
+            update_manifest=False,
         )
 
         # For each fragment in the data batch, we create a new artifact
