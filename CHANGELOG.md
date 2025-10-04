@@ -1,3 +1,15 @@
+## 2.3.0rc11 (2025-10-04)
+
+### Refactor
+
+- rename variable 'globs' to 'artifact_paths' for clarity in data artifact queries
+
+### Perf
+
+- skip redundant existence checks for artifacts in query
+- skip manifest update before asset run
+- read last materialized from asset manifest
+
 ## 2.3.0rc10 (2025-10-04)
 
 ### Feat
