@@ -24,8 +24,8 @@ class DataArtifactQuery:
     async def query(self, query_str: str | None = None, params: object | None = None):
         await register_mad_protocol()
 
-        # Get the globs for any artifacts which exist
-        existing_artifacts = [a for a in self.artifacts if await a.exists()]
+        # Skip redundant existence checks; rely on persist() marking artifacts as persisted.
+        existing_artifacts = [a for a in self.artifacts if a.persisted]
         globs = [f"mad://{a.path.strip('/')}" for a in existing_artifacts]
 
         if not globs:
