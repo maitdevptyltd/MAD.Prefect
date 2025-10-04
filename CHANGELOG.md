@@ -1,3 +1,13 @@
+## 2.3.0rc10 (2025-10-04)
+
+### Feat
+
+- asset manifest
+
+### Refactor
+
+- extract asset metadata helper and add coverage
+
 ## 2.3.0rc9 (2025-10-03)
 
 ### Fix
