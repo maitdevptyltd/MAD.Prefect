@@ -12,7 +12,10 @@ from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollecto
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
 from mad_prefect.data_assets.asset_template_formatter import AssetTemplateFormatter
-from mad_prefect.data_assets.asset_metadata import get_asset_metadata
+from mad_prefect.data_assets.asset_metadata import (
+    ManifestRunStatus,
+    get_asset_metadata,
+)
 from mad_prefect.data_assets.utils import safe_truthy
 from mad_prefect.filesystems import get_fs
 from mad_prefect.data_assets.data_asset import DataAsset
@@ -128,7 +131,10 @@ class DataAssetCallable(Generic[P, R]):
         )
 
         # Write metadata before processing result for troubleshooting purposes
-        await asset_run.persist()
+        await asset_run.persist(
+            asset_signature=asset.id,
+            status=ManifestRunStatus.UNKNOWN,
+        )
 
         # For each fragment in the data batch, we create a new artifact
         base_artifact_path = self._get_artifact_base_path()
@@ -182,7 +188,11 @@ class DataAssetCallable(Generic[P, R]):
         duration = asset_run.materialized - asset_run.runtime
         asset_run.duration_miliseconds = int(duration.total_seconds() * 1000)
 
-        await asset_run.persist()
+        await asset_run.persist(
+            artifact_paths=[artifact.path for artifact in self.result_artifacts],
+            asset_signature=asset.id,
+            status=ManifestRunStatus.SUCCESS,
+        )
 
         logger.info(
             f"Successfully executed asset '{asset.name}'. Duration: {duration.total_seconds():.2f}s (run_id: {asset_run.id})"
