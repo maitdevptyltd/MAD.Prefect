@@ -26,16 +26,16 @@ class DataArtifactQuery:
 
         # Skip redundant existence checks; rely on persist() marking artifacts as persisted.
         existing_artifacts = [a for a in self.artifacts if a.persisted]
-        globs = [f"mad://{a.path.strip('/')}" for a in existing_artifacts]
+        artifact_paths = [f"mad://{a.path.strip('/')}" for a in existing_artifacts]
 
-        if not globs:
+        if not artifact_paths:
             logger.warning(
                 "Query attempted on an artifact collection with no existing files. Returning None."
             )
             return
 
-        logger.info(f"Starting query across {len(globs)} artifact paths.")
-        logger.debug(f"Querying globs: {globs}")
+        logger.info(f"Starting query across {len(artifact_paths)} artifact paths.")
+        logger.debug(f"Querying paths: {artifact_paths}")
 
         # Ensure each artifact is of the same filetype
         filetypes = set([a.filetype for a in existing_artifacts])
@@ -48,11 +48,11 @@ class DataArtifactQuery:
         logger.debug(f"Determined artifact filetype for query: {filetype}")
 
         if filetype == "json":
-            artifact_query = self._create_query_json(globs)
+            artifact_query = self._create_query_json(artifact_paths)
         elif filetype == "parquet":
-            artifact_query = self._create_query_parquet(globs)
+            artifact_query = self._create_query_parquet(artifact_paths)
         elif filetype == "csv":
-            artifact_query = self._create_query_csv(globs)
+            artifact_query = self._create_query_csv(artifact_paths)
         else:
             raise ValueError(f"Unsupported file format {filetype}")
 
@@ -65,10 +65,10 @@ class DataArtifactQuery:
         logger.debug("Executing base artifact query.")
         return artifact_query
 
-    def _create_query_json(self, globs: list[str]):
+    def _create_query_json(self, artifact_paths: list[str]):
         # Prepare the globs string
-        globs_str = ", ".join(f"'{g}'" for g in globs)
-        globs_formatted = f"[{globs_str}]"
+        artifact_paths_str = ", ".join(f"'{g}'" for g in artifact_paths)
+        artifact_paths_formatted = f"[{artifact_paths_str}]"
         logger.debug(
             f"Building JSON read query with options: {self.read_json_options.model_dump(exclude_none=True)}"
         )
@@ -82,9 +82,9 @@ class DataArtifactQuery:
 
         # Build the base query string without 'columns'
         base_query = (
-            f"SELECT * FROM read_json({globs_formatted}, {options_str})"
+            f"SELECT * FROM read_json({artifact_paths_formatted}, {options_str})"
             if options_str
-            else f"SELECT * FROM read_json({globs_formatted})"
+            else f"SELECT * FROM read_json({artifact_paths_formatted})"
         )
 
         # Process columns after building the base query
@@ -99,7 +99,7 @@ class DataArtifactQuery:
             options_str_with_columns = self._format_options_dict(options_with_columns)
 
             # Rebuild the query with 'columns'
-            final_query = f"SELECT * FROM read_json({globs_formatted}, {options_str_with_columns})"
+            final_query = f"SELECT * FROM read_json({artifact_paths_formatted}, {options_str_with_columns})"
         else:
             final_query = base_query
 
@@ -132,10 +132,10 @@ class DataArtifactQuery:
         logger.debug(f"Final columns for query: {updated_columns}")
         return updated_columns
 
-    def _create_query_parquet(self, globs: list[str]):
+    def _create_query_parquet(self, artifact_paths: list[str]):
         # Prepare the globs string
-        globs_str = ", ".join(f"'{g}'" for g in globs)
-        globs_formatted = f"[{globs_str}]"
+        artifact_paths_str = ", ".join(f"'{g}'" for g in artifact_paths)
+        artifact_paths_formatted = f"[{artifact_paths_str}]"
 
         # Include only relevant options
         options_dict = {"hive_partitioning": True, "union_by_name": True}
@@ -143,7 +143,7 @@ class DataArtifactQuery:
 
         # Build the query string
         artifact_base_query = (
-            f"SELECT * FROM read_parquet({globs_formatted}, {options_str})"
+            f"SELECT * FROM read_parquet({artifact_paths_formatted}, {options_str})"
         )
 
         # Execute the query
@@ -151,10 +151,10 @@ class DataArtifactQuery:
         artifact_query = duckdb.query(artifact_base_query)
         return artifact_query
 
-    def _create_query_csv(self, globs: list[str]):
+    def _create_query_csv(self, artifact_paths: list[str]):
         # Convert each artifact path to a DuckDB-friendly string
-        globs_str = ", ".join(f"'{g}'" for g in globs)
-        globs_formatted = f"[{globs_str}]"
+        artifact_paths_str = ", ".join(f"'{g}'" for g in artifact_paths)
+        artifact_paths_formatted = f"[{artifact_paths_str}]"
         logger.debug(
             f"Building CSV read query with options: {self.read_csv_options.model_dump(exclude_none=True)}"
         )
@@ -168,9 +168,9 @@ class DataArtifactQuery:
 
         # Build the base query string without 'columns'
         base_query = (
-            f"SELECT * FROM read_csv({globs_formatted}, {options_str})"
+            f"SELECT * FROM read_csv({artifact_paths_formatted}, {options_str})"
             if options_str
-            else f"SELECT * FROM read_csv({globs_formatted})"
+            else f"SELECT * FROM read_csv({artifact_paths_formatted})"
         )
 
         # Execute the query
