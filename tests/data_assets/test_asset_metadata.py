@@ -14,6 +14,9 @@ from mad_prefect.data_assets.asset_metadata import (
 )
 from mad_prefect.data_assets import ASSET_METADATA_LOCATION
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
+from mad_prefect.data_assets.data_asset_callable import DataAssetCallable
+from mad_prefect.data_assets.data_asset import DataAsset
+from mad_prefect.data_assets.data_asset_options import DataAssetOptions
 
 
 @pytest.fixture()
@@ -230,3 +233,72 @@ async def test_manifest_created_when_only_legacy_metadata_exists(isolated_filesy
     assert relation is not None
     rows = relation.fetchall()
     assert any(row[0] == "run-new" for row in rows)
+
+
+async def test_get_last_materialized_prefers_manifest(isolated_filesystem):
+    asset_name = "asset.name"
+    test_asset_callable = _create_test_callable(asset_name)
+    asset_id = test_asset_callable.asset.id
+
+    run = DataAssetRun(
+        id="run-1",
+        runtime=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        materialized=datetime(2024, 1, 2, tzinfo=timezone.utc),
+        asset_id=asset_id,
+        asset_name=asset_name,
+        asset_path="/tmp/asset",
+    )
+
+    await run.persist(
+        asset_signature=asset_id,
+        status=ManifestRunStatus.SUCCESS,
+    )
+
+    manifest = await load_asset_manifest(asset_name, asset_id)
+    assert manifest and manifest.last_materialized == datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+    last_materialized = await test_asset_callable._get_last_materialized(test_asset_callable.asset)
+    assert last_materialized == datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+
+async def test_get_last_materialized_falls_back_to_metadata(isolated_filesystem):
+    asset_name = "asset.name"
+    test_asset_callable = _create_test_callable(asset_name)
+    asset_id = test_asset_callable.asset.id
+
+    run = DataAssetRun(
+        id="run-legacy",
+        runtime=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        materialized=datetime(2024, 1, 2, tzinfo=timezone.utc),
+        asset_id=asset_id,
+        asset_name=asset_name,
+        asset_path="/tmp/asset",
+    )
+
+    await run.persist(
+        asset_signature=asset_id,
+        status=ManifestRunStatus.SUCCESS,
+    )
+
+    fs = await mad_filesystems.get_fs()
+    manifest_path = (
+        f"{ASSET_METADATA_LOCATION}/asset_name={asset_name}/asset_id={asset_id}/manifest.json"
+    )
+    await fs.delete_path(manifest_path, recursive=False)
+
+    last_materialized = await test_asset_callable._get_last_materialized(test_asset_callable.asset)
+    assert last_materialized == datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+
+def _create_test_callable(asset_name: str) -> DataAssetCallable:
+    async def materialize():
+        return []
+
+    asset_instance = DataAsset(
+        materialize,
+        f"{asset_name}.parquet",
+        asset_name,
+        DataAssetOptions(),
+    )
+
+    return DataAssetCallable(asset_instance)

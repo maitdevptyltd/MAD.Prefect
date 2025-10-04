@@ -15,6 +15,7 @@ from mad_prefect.data_assets.asset_template_formatter import AssetTemplateFormat
 from mad_prefect.data_assets.asset_metadata import (
     ManifestRunStatus,
     get_asset_metadata,
+    load_asset_manifest,
 )
 from mad_prefect.data_assets.utils import safe_truthy
 from mad_prefect.filesystems import get_fs
@@ -230,19 +231,27 @@ class DataAssetCallable(Generic[P, R]):
 
     async def _get_last_materialized(self, asset: DataAsset):
         logger.debug(f"Fetching last materialization time for asset '{asset.name}'")
+
+        manifest = await load_asset_manifest(asset.name, asset.id)
+
+        if manifest and manifest.last_materialized:
+            logger.debug(
+                "Resolved last materialized from manifest: %s",
+                manifest.last_materialized,
+            )
+            return manifest.last_materialized
+
         asset_metadata = await get_asset_metadata(asset.name, asset.id)
 
         if not safe_truthy(asset_metadata):
             return
 
         last_materialized_query = duckdb.query(
-            "SELECT max(strptime(materialized, '%Y-%m-%dT%H:%M:%S.%fZ')) FROM asset_metadata"
+            "SELECT max(CAST(materialized AS VARCHAR)) FROM asset_metadata"
         ).fetchone()
 
         if last_materialized_query and last_materialized_query[0]:
-            # Convert DuckDB timestamp to Python datetime
             last_materialized = datetime.fromisoformat(str(last_materialized_query[0]))
-            # Ensure it's UTC
             return last_materialized.replace(tzinfo=timezone.utc)
 
     async def _cached_result(

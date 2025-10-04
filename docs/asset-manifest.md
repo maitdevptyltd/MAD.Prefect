@@ -7,6 +7,7 @@
 
 ## Usage
 - `DataAssetRun.persist()` now writes run metadata and upserts the manifest with the run's status and materialization time.
+- `DataAssetCallable._get_last_materialized()` reads `manifest.last_materialized` when present and only falls back to DuckDB globbing for legacy assets.
 - Call `mad_prefect.data_assets.asset_metadata.load_asset_manifest(name, id)` to read the manifest, or `upsert_asset_manifest_from_run()` when integrating new asset workflows.
 - When accessing metadata, prefer the manifest before globbing to locate run files; fall back to globbing if the manifest is unavailable.
 
