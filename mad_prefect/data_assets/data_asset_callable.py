@@ -7,14 +7,13 @@ import os
 from pathlib import Path
 from typing import Generic, ParamSpec, TypeVar, cast
 import duckdb
-from mad_prefect.data_assets.asset_decorator import ASSET_METADATA_LOCATION
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_collector import DataArtifactCollector
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_run import DataAssetRun
 from mad_prefect.data_assets.asset_template_formatter import AssetTemplateFormatter
+from mad_prefect.data_assets.asset_metadata import get_asset_metadata
 from mad_prefect.data_assets.utils import safe_truthy
-from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 from mad_prefect.data_assets.data_asset import DataAsset
 
@@ -221,7 +220,7 @@ class DataAssetCallable(Generic[P, R]):
 
     async def _get_last_materialized(self, asset: DataAsset):
         logger.debug(f"Fetching last materialization time for asset '{asset.name}'")
-        asset_metadata = await self._get_asset_metadata(asset)
+        asset_metadata = await get_asset_metadata(asset.name, asset.id)
 
         if not safe_truthy(asset_metadata):
             return
@@ -235,18 +234,6 @@ class DataAssetCallable(Generic[P, R]):
             last_materialized = datetime.fromisoformat(str(last_materialized_query[0]))
             # Ensure it's UTC
             return last_materialized.replace(tzinfo=timezone.utc)
-
-    async def _get_asset_metadata(self, asset: DataAsset):
-        await register_mad_protocol()
-        fs = await get_fs()
-
-        metadata_glob = f"{ASSET_METADATA_LOCATION}/asset_name={asset.name}/asset_id={asset.id}/**/*.json"
-        logger.debug(f"Searching for asset metadata with glob: {metadata_glob}")
-
-        if fs.glob(metadata_glob):
-            return duckdb.query(
-                f"SELECT UNNEST(data, max_depth:=2) FROM read_json('mad://{metadata_glob}')"
-            )
 
     async def _cached_result(
         self,
