@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mad-prefect"
-version = "2.3.0rc11"
+version = "2.3.0rc12"
 description = ""
 authors = ["MAIT DEV Pty Ltd <maitland@mait.dev>"]
 readme = "README.md"

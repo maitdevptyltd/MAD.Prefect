@@ -1,3 +1,9 @@
+## 2.3.0rc12 (2025-10-12)
+
+### Fix
+
+- update duckdb version constraint to allow versions <1.5
+
 ## 2.3.0rc11 (2025-10-04)
 
 ### Refactor
