@@ -1,5 +1,3 @@
-# MAD Prefect Data Assets - Developer Documentation
-
 ## Introduction
 
 The `mad_prefect` library introduces a powerful pattern for managing data within Prefect workflows using **data assets**. A data asset represents a unit of data that can be materialized, cached, and queried independently. By leveraging data assets, you can build modular, reusable, and maintainable data pipelines that are efficient and easy to reason about.
@@ -52,6 +50,7 @@ In this example, `generate_data` is defined as a data asset using the `@asset` d
 ## Table of Contents
 
 1. [Modules](#modules)
+
    - [Asset Decorator](#asset-decorator)
    - [DataAsset Class](#dataasset-class)
    - [DataArtifact Class](#dataartifact-class)
@@ -100,8 +99,8 @@ The `asset` decorator is used to define a data asset within a Prefect flow. It w
 **Parameters:**
 
 - `path` (str): The path where the final result artifact will be stored.
-    - Supports multiple file types using a |-delimited syntax 
-    - e.g. "path/to/file.parquet|csv" will produce two result artifacts at "path/to/file.parquet" and "path/to/file.csv"
+  - Supports multiple file types using a |-delimited syntax
+  - e.g. "path/to/file.parquet|csv" will produce two result artifacts at "path/to/file.parquet" and "path/to/file.csv"
 - `artifacts_dir` (str, optional): The directory where intermediate artifacts will be stored.
 - `name` (str, optional): The name of the data asset. If not provided, defaults to the function name.
 - `snapshot_artifacts` (bool, optional): Whether to snapshot artifacts over time.
