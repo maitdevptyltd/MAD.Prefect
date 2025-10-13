@@ -3,7 +3,7 @@ from decimal import Decimal
 import json
 import random
 import string
-from uuid import UUID
+from uuid import UUID, uuid4
 import duckdb
 from pydantic import BaseModel
 from mad_prefect.data_assets import asset
@@ -648,6 +648,34 @@ async def test_details_asset_fetchmany():
 
     assert beavers_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
     assert peacocks_details_count[0] == len(FETCHMANY_SAMPLE_DATA)
+
+
+async def test_asset_materialization_does_not_require_manual_protocol_registration():
+    fs = await get_fs()
+    source_path = f"mad_auto_register_source_{uuid4().hex}.parquet"
+    await fs.write_data(
+        source_path,
+        [
+            {"id": "951c58e4-b9a4-4478-883e-22760064e416", "count": 1},
+            {"id": "951c58e4-b9a4-4478-883e-22760064e416", "count": 2},
+        ],
+    )
+
+    result_path = f"mad_auto_register_result_{uuid4().hex}.parquet"
+
+    @asset(result_path, artifact_filetype="parquet")
+    async def auto_register_asset():
+        return duckdb.query(f"SELECT * FROM 'mad://{source_path}'")
+
+    artifact = await auto_register_asset()
+    assert artifact
+
+    query = await artifact.query("SELECT COUNT(*) c")
+    assert safe_truthy(query)
+
+    count_row = query.fetchone()
+    assert count_row
+    assert count_row[0] == 2
 
 
 async def test_materialize_artifact_csv():

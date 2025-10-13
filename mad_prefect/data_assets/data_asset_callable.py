@@ -20,6 +20,7 @@ from mad_prefect.data_assets.asset_metadata import (
 from mad_prefect.data_assets.utils import safe_truthy
 from mad_prefect.filesystems import get_fs
 from mad_prefect.data_assets.data_asset import DataAsset
+from mad_prefect.duckdb import register_mad_protocol
 
 P = ParamSpec("P")
 R = TypeVar("R", covariant=True)
@@ -149,6 +150,9 @@ class DataAssetCallable(Generic[P, R]):
             )
             fs = await get_fs()
             await fs.delete_path(base_artifact_path, recursive=True)
+
+        # Ensure MAD protocol is available before executing user-provided asset code.
+        await register_mad_protocol()
 
         collector = DataArtifactCollector(
             cast(partial, self._fn)(),
