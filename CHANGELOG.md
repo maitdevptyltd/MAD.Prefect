@@ -1,3 +1,9 @@
+## 2.3.0rc13 (2025-10-13)
+
+### Fix
+
+- auto-register mad protocol during asset execution
+
 ## 2.3.0rc12 (2025-10-12)
 
 ### Fix
