@@ -26,6 +26,9 @@ result_artifact = await generate_data()
 
 # Querying the data asset
 query_result = await generate_data.query("WHERE id > 1")
+
+# Reusing the cached artifact for ad-hoc analysis
+cached_view = await generate_data.cache_first().query("SELECT * FROM data")
 ```
 
 In this example, `generate_data` is defined as a data asset using the `@asset` decorator. When executed, it automatically handles data persistence to the specified path, caching based on the `cache_expiration`, and allows querying the data without loading it entirely into memory.
@@ -148,6 +151,7 @@ The `DataAsset` class represents a data asset in the system. It manages the exec
 - `with_arguments(*args, **kwargs)`: Returns a new `DataAsset` instance with the provided arguments bound.
 - `with_options(...)`: Returns a new `DataAsset` instance with overridden options.
 - `__call__(self, *args, **kwargs)`: Executes the data asset, handling caching and persistence.
+- `cache_first(self, expiration: timedelta | None = None)`: Returns a new asset configured to reuse cached artifacts, optionally overriding the default long-lived TTL.
 - `query(self, query_str: str | None = None)`: Queries the data asset using DuckDB.
 
 **Properties:**

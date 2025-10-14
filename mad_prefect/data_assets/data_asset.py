@@ -1,3 +1,4 @@
+from datetime import timedelta
 from functools import cached_property
 import hashlib
 import logging
@@ -11,6 +12,8 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 logger = logging.getLogger(__name__)
+
+CACHE_FIRST_CACHE_EXPIRATION = timedelta(days=9999)
 
 
 class DataAsset(Generic[P, R]):
@@ -37,6 +40,7 @@ class DataAsset(Generic[P, R]):
         self._configurator = configurator = FluentDataAssetConfigurator(self)
         self.with_arguments = configurator.with_arguments
         self.with_options = configurator.with_options
+        self.cache_first = configurator.cache_first
 
         self._callable = DataAssetCallable(self)
 

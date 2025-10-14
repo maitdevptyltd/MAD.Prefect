@@ -3,7 +3,10 @@ from datetime import timedelta
 from functools import partial
 from typing import Generic, ParamSpec, TypeVar, overload
 from mad_prefect.data_assets.asset_decorator import ARTIFACT_FILE_TYPES
-from mad_prefect.data_assets.data_asset import DataAsset
+from mad_prefect.data_assets.data_asset import (
+    DataAsset,
+    CACHE_FIRST_CACHE_EXPIRATION,
+)
 from mad_prefect.data_assets.data_asset_options import DataAssetOptions
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 
@@ -69,3 +72,12 @@ class FluentDataAssetConfigurator(Generic[P, R]):
         )
 
         return asset
+
+    def cache_first(self, expiration: timedelta | None = None) -> DataAsset[P, R]:
+        logger.debug(
+            "Configuring asset '%s' to prioritize cached materializations.",
+            self.asset.name,
+        )
+
+        ttl = expiration if expiration is not None else CACHE_FIRST_CACHE_EXPIRATION
+        return self.with_options(cache_expiration=ttl)
