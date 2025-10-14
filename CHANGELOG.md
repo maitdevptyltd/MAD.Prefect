@@ -1,3 +1,9 @@
+## 2.3.0rc14 (2025-10-14)
+
+### Feat
+
+- **data-assets**: add cache-first helper for asset reuse
+
 ## 2.3.0rc13 (2025-10-13)
 
 ### Fix
