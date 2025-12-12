@@ -64,3 +64,70 @@ def test_formatter_handles_none_template():
     formatter = AssetTemplateFormatter(tuple(), bound_args)
 
     assert formatter.format(None) is None
+
+
+def test_partial_format_preserves_indexed_placeholders():
+    def fn(endpoint: str):
+        return endpoint
+
+    bound_args = inspect.signature(fn).bind_partial(endpoint="orders")
+    formatter = AssetTemplateFormatter(tuple(), bound_args)
+
+    template = "{customer_paths[0]}/{endpoint}"
+    assert (
+        formatter.format(template, allow_partial=True) == "{customer_paths[0]}/orders"
+    )
+
+
+def test_partial_format_preserves_dict_key_placeholders():
+    def fn(endpoint: str):
+        return endpoint
+
+    bound_args = inspect.signature(fn).bind_partial(endpoint="orders")
+    formatter = AssetTemplateFormatter(tuple(), bound_args)
+
+    template = "{metadata[customer]}/{endpoint}"
+    assert (
+        formatter.format(template, allow_partial=True) == "{metadata[customer]}/orders"
+    )
+
+
+def test_formatter_resolves_index_access_when_values_present():
+    def fn(customer_paths: list[str], endpoint: str):
+        return customer_paths, endpoint
+
+    bound_args = inspect.signature(fn).bind_partial(
+        customer_paths=["alpha", "beta"],
+        endpoint="orders",
+    )
+    formatter = AssetTemplateFormatter(tuple(), bound_args)
+
+    assert formatter.format("{customer_paths[1]}/{endpoint}") == "beta/orders"
+
+
+def test_formatter_resolves_dict_access():
+    def fn(metadata: dict[str, str], endpoint: str):
+        return metadata, endpoint
+
+    bound_args = inspect.signature(fn).bind_partial(
+        metadata={"customer": "acme", "region": "apac"},
+        endpoint="orders",
+    )
+    formatter = AssetTemplateFormatter(tuple(), bound_args)
+
+    assert formatter.format("{metadata[customer]}/{endpoint}") == "acme/orders"
+
+
+def test_duplicate_arguments():
+    @asset(path="listing/{endpoint}.parquet", name="{endpoint}")
+    def listing(endpoint: str):
+        return {endpoint: f"{endpoint}_value_1"}
+
+    @asset(path="detailed/{endpoint}/{listing_asset.name}.parquet")
+    def detailed(endpoint: str, listing_asset: DataAsset):
+        return {endpoint: f"{listing_asset.name}_value_2"}
+
+    widgets_listing = listing.with_arguments("widgets")
+    widgets_sales = detailed.with_arguments("sales", widgets_listing)
+
+    assert widgets_sales.path == "detailed/sales/widgets.parquet"

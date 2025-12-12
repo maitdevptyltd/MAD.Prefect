@@ -12,9 +12,17 @@ from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 
 P = ParamSpec("P")
 R = TypeVar("R")
+T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
+class Unset: pass
+UNSET = Unset()
+
+def resolve(value: T | Unset, default: T) -> T:
+    if isinstance(value, Unset):
+        return default
+    return value
 
 class FluentDataAssetConfigurator(Generic[P, R]):
     def __init__(self, asset: DataAsset[P, R]):
@@ -36,38 +44,42 @@ class FluentDataAssetConfigurator(Generic[P, R]):
         # Return a new asset based on the bound arguments
         asset = DataAsset[P, R](
             new_fn,
-            self.asset.path,
-            self.asset.name,
-            self.asset.options,
+            self.asset.template_path,
+            self.asset.template_name,
+            self.asset.base_options,
         )
         return asset
 
     def with_options(
         self,
-        path: str | None = None,
-        artifacts_dir: str | None = None,
-        name: str | None = None,
-        snapshot_artifacts: bool | None = None,
-        artifact_filetype: ARTIFACT_FILE_TYPES | None = None,
-        read_json_options: ReadJsonOptions | None = None,
-        read_csv_options: ReadCSVOptions | None = None,
-        cache_expiration: timedelta | None = None,
+        path: str | Unset = UNSET,
+        artifacts_dir: str | Unset = UNSET,
+        name: str | Unset = UNSET,
+        snapshot_artifacts: bool | Unset = UNSET,
+        artifact_filetype: ARTIFACT_FILE_TYPES | Unset = UNSET,
+        read_json_options: ReadJsonOptions | None | Unset = UNSET,
+        read_csv_options: ReadCSVOptions | None | Unset = UNSET,
+        cache_expiration: timedelta | None | Unset = UNSET,
     ):
         logger.debug(f"Configuring asset '{self.asset.name}' with new options.")
-        # Default to the current asset's options for any None values
+
+        # Resolve defaults for any options that remain unset by with_options
         options = DataAssetOptions(
-            artifacts_dir=artifacts_dir or self.asset.options.artifacts_dir,
-            snapshot_artifacts=snapshot_artifacts
-            or self.asset.options.snapshot_artifacts,
-            artifact_filetype=artifact_filetype or self.asset.options.artifact_filetype,
-            read_json_options=read_json_options or self.asset.options.read_json_options,
-            read_csv_options=read_csv_options or self.asset.options.read_csv_options,
-            cache_expiration=cache_expiration or self.asset.options.cache_expiration,
+            artifacts_dir=resolve(artifacts_dir, self.asset.base_options.artifacts_dir),
+            snapshot_artifacts=resolve(snapshot_artifacts, self.asset.base_options.snapshot_artifacts),
+            artifact_filetype=resolve(artifact_filetype, self.asset.base_options.artifact_filetype),
+            read_json_options=resolve(read_json_options, self.asset.base_options.read_json_options),
+            read_csv_options=resolve(read_csv_options, self.asset.base_options.read_csv_options),
+            cache_expiration=resolve(cache_expiration, self.asset.base_options.cache_expiration),
         )
+
+        final_path = resolve(path, self.asset.template_path)
+        final_name = resolve(name, self.asset.template_name)
+        
         asset = DataAsset(
             self.asset._fn,
-            path or self.asset.path,
-            name or self.asset.name,
+            final_path,
+            final_name,
             options=options,
         )
 
