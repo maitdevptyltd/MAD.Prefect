@@ -3,7 +3,9 @@ from functools import cached_property
 import hashlib
 import logging
 import re
+from copy import deepcopy
 from typing import Callable, Generic, ParamSpec, TypeVar, overload
+from mad_prefect.data_assets.asset_template_formatter import AssetTemplateFormatter
 from mad_prefect.data_assets.data_artifact import DataArtifact
 from mad_prefect.data_assets.data_artifact_query import DataArtifactQuery
 from mad_prefect.data_assets.data_asset_options import DataAssetOptions
@@ -29,12 +31,14 @@ class DataAsset(Generic[P, R]):
             FluentDataAssetConfigurator,
         )
 
-        self.name = self._sanitize_name(name)
-        self.path = path
-        self.options = options
-        self._fn = fn
+        # Deep copy options object to ensure each instance gets a clean copy
+        self.base_options = options
+        self.options = deepcopy(options)
 
-        logger.info(f"DataAsset '{self.name}' initialized for path '{self.path}'.")
+        # Set up template values prior to formatting with args
+        self.template_name = name
+        self.template_path = path
+        self.template_artifacts_dir = self.options.artifacts_dir
 
         # Expose the fluent configurator api
         self._configurator = configurator = FluentDataAssetConfigurator(self)
@@ -42,7 +46,33 @@ class DataAsset(Generic[P, R]):
         self.with_options = configurator.with_options
         self.cache_first = configurator.cache_first
 
+        self._fn = fn
         self._callable = DataAssetCallable(self)
+
+        # Lazily format relevant fields if arguments are bound
+        bound_args = self._callable.get_bound_arguments()
+        
+        if bound_args.arguments:
+            formatter = AssetTemplateFormatter(self._callable.args, bound_args)
+            self.path = (
+                formatter.format(self.template_path, allow_partial=True)
+                or self.template_path
+            )
+            formatted_name = formatter.format(self.template_name, allow_partial=True)
+            self.name = self._sanitize_name(formatted_name or self.template_name)
+            self.options.artifacts_dir = (
+                formatter.format(self.template_artifacts_dir, allow_partial=True) or ""
+            )
+        else:
+            self.path = self.template_path
+            self.name = self._sanitize_name(self.template_name)
+
+        logger.info(f"DataAsset '{self.name}' initialized for path '{self.path}'.")
+
+        logger.debug(
+            f"DataAsset '{self.name}' initialized with bound args {bound_args.arguments}, "
+            f"path: '{self.path}', artifacts_dir: '{self.options.artifacts_dir}'"
+        )
 
     @overload
     async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> DataArtifact: ...
@@ -58,7 +88,7 @@ class DataAsset(Generic[P, R]):
 
     async def query(self, query_str: str | None = None, params: object | None = None):
         logger.info(f"Querying data asset '{self.name}' with query: '{query_str}'")
-        
+
         result_artifact = await self()
         artifact_query = DataArtifactQuery(
             [result_artifact],

@@ -41,9 +41,5 @@ async def test_with_arguments_partial_with_name():
     configurator = FluentDataAssetConfigurator(generic_asset_with_name)
     test_asset = configurator.with_arguments(path="work_orders")
 
-    # At this point, the asset shouldn't have the template variables replaced
-    assert test_asset.name == "{path}"
-
-    # But after running it, it should have the template variables replaced
-    result = await test_asset()
+    # At this point, the asset will have substitution due to initialization formatting
     assert test_asset.name == "work_orders"

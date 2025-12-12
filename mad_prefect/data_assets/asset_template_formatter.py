@@ -4,8 +4,6 @@ import inspect
 import string
 from typing import Any
 
-from mad_prefect.data_assets.data_asset import DataAsset
-
 
 class AssetTemplateFormatter:
     """Render data asset templates using bound argument context."""
@@ -24,12 +22,12 @@ class AssetTemplateFormatter:
         """Return a shallow copy of the computed keyword arguments."""
         return dict(self._format_kwargs)
 
-    def format(self, template: str | None) -> str | None:
+    def format(self, template: str | None, allow_partial: bool = False) -> str | None:
         """Format ``template`` using positional and keyword arguments.
 
-        The method resolves nested placeholders until the rendered string contains
-        no additional fields. If a placeholder is missing, a ``KeyError`` with a
-        descriptive message is raised.
+        When ``allow_partial`` is ``True`` missing placeholders are preserved so
+        partially configured assets can render known values without raising.
+        Otherwise behaviour matches ``str.format`` and missing keys raise.
         """
         if template is None:
             return None
@@ -43,21 +41,40 @@ class AssetTemplateFormatter:
 
             seen_templates.add(formatted)
 
-            try:
-                formatted = formatted.format(
-                    *self._format_args,
-                    **self._format_kwargs,
-                )
-            except KeyError as exc:
-                missing_key = exc.args[0] if exc.args else "<unknown>"
-                available_keys = ", ".join(sorted(self._format_kwargs.keys())) or "<none>"
-                raise KeyError(
-                    "Missing format key "
-                    f"'{missing_key}' while formatting asset template '{template}'. "
-                    f"Available keys: {available_keys}"
-                ) from exc
+            # Perform a single formatting pass, switching between partial vs strict
+            # behaviour depending on the caller. Partial mode uses a safe formatter
+            # that keeps unresolved placeholders intact so initialization never raises.
+            formatted = self._safe_format(
+                formatted,
+                template,
+                allow_partial=allow_partial,
+            )
 
         return formatted
+
+    def _safe_format(
+        self,
+        template: str,
+        original_template: str,
+        allow_partial: bool,
+    ) -> str:
+        """Format a single pass of the template respecting ``allow_partial``."""
+        if allow_partial:
+            # ``format_map`` lets us intercept missing keys via _SafeFormatDict so we
+            # can return placeholder proxies instead of raising.
+            return template.format_map(_SafeFormatDict(self._format_kwargs))
+
+        try:
+            return template.format(*self._format_args, **self._format_kwargs)
+        except KeyError as exc:
+            missing_key = exc.args[0] if exc.args else "<unknown>"
+            available_keys = ", ".join(sorted(self._format_kwargs.keys())) or "<none>"
+            raise KeyError(
+                "Missing format key "
+                f"'{missing_key}' while formatting asset template "
+                f"'{original_template}'. "
+                f"Available keys: {available_keys}"
+            ) from exc
 
     def _prepare_format_kwargs(
         self, bound_args: inspect.BoundArguments
@@ -80,6 +97,8 @@ class AssetTemplateFormatter:
         accumulator: dict[str, Any],
         seen_assets: set[int],
     ) -> None:
+        from mad_prefect.data_assets.data_asset import DataAsset
+
         if not isinstance(value, DataAsset):
             return
 
@@ -102,3 +121,25 @@ class AssetTemplateFormatter:
                 return True
 
         return False
+
+
+class _SafeFormatDict(dict[str, Any]):
+    """dict that leaves missing template keys untouched."""
+
+    def __missing__(self, key: str) -> str:
+        return _Placeholder(key)
+
+
+class _Placeholder(str):
+    """String proxy that preserves dotted attribute/index access."""
+
+    def __new__(cls, key: str) -> "_Placeholder":
+        return super().__new__(cls, "{" + key + "}")
+
+    def __getattr__(self, item: str) -> "_Placeholder":
+        # Chaining attribute access (e.g. ".name") builds a new placeholder token.
+        return _Placeholder(f"{self.strip('{}')}.{item}")
+
+    def __getitem__(self, item: Any) -> "_Placeholder":
+        # Support index access (e.g. "[0]") while keeping template markers intact.
+        return _Placeholder(f"{self.strip('{}')}[{item}]")
