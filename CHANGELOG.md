@@ -1,3 +1,43 @@
+## 2.3.0rc16 (2026-04-09)
+
+### Feat
+
+- attribute templating (#22)
+- **data-assets**: add cache-first helper for asset reuse
+- asset manifest
+- update Python and dependency version constraints in pyproject.toml
+- Add support for parameterized queries (#21)
+- logging (#20)
+- add overloads for with_arguments method in FluentDataAssetConfigurator for robust type hints
+- create EnvBlock class to automatically load API credentials from a Prefect Block or environment variables (#18)
+
+### Fix
+
+- auto-register mad protocol during asset execution
+- update duckdb version constraint to allow versions <1.5
+- allow duckdb >= 1.3 by safe_truthy checks on duckdbpyrelations
+- ensure DuckDB protocol reuses filesystem and prevent unnecessary registrations
+- memoize duckdb filesystem registration to prevent leaks
+- resolve nested data asset template placeholders
+- update regex in _sanitize_name method to allow curly braces
+- add return type annotation to with_arguments method
+- set asset_id in DataAssetRun during initialization
+- update __call__ method overloads in DataAsset to return DataArtifact for robust type hints
+
+### Refactor
+
+- rename variable 'globs' to 'artifact_paths' for clarity in data artifact queries
+- extract asset metadata helper and add coverage
+- migrate DataAsset callable logic to its own class
+- encapsulate with_options and with_arguments in confugrators
+- asset decorator as its own class, add DataAssetOptions instead of many options in data asset constructor
+
+### Perf
+
+- skip redundant existence checks for artifacts in query
+- skip manifest update before asset run
+- read last materialized from asset manifest
+
 ## 2.3.0rc15 (2025-12-12)
 
 ### Feat
