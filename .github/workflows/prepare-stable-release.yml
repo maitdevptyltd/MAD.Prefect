@@ -1,0 +1,90 @@
+name: prepare-stable-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    # Branch strategy:
+    # - next stays automated for prerelease bumps, tags, releases, and PyPI publishing
+    # - main stays PR-only and is never mutated by CI
+    # - stable releases are finalized on a release branch and merged into main via PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out next with full history
+        uses: actions/checkout@v4
+        with:
+          ref: next
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: "x64"
+
+      - name: Install & configure Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          virtualenvs-path: .venv
+          installer-parallel: true
+
+      - name: Install release tooling
+        run: poetry install --no-interaction --only dev --no-root
+
+      - name: Derive stable release version
+        id: version
+        run: |
+          current_version="$(poetry version -s)"
+          stable_version="$(python -c 'import re, sys; print(re.sub(r"(?:(?:a|b|rc)\d+)$", "", sys.argv[1]))' "$current_version")"
+
+          if [ "$stable_version" = "$current_version" ]; then
+            echo "::error::Expected a prerelease version on next, found $current_version"
+            exit 1
+          fi
+
+          echo "current_version=$current_version" >> "$GITHUB_OUTPUT"
+          echo "stable_version=$stable_version" >> "$GITHUB_OUTPUT"
+          echo "release_branch=release/stable-v$stable_version" >> "$GITHUB_OUTPUT"
+
+      - name: Finalize version files and changelog without tagging
+        run: |
+          poetry run cz bump "${{ steps.version.outputs.stable_version }}" \
+            --allow-no-commit \
+            --changelog \
+            --version-files-only \
+            --yes
+
+      - name: Open or update stable release PR
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: |
+            CHANGELOG.md
+            pyproject.toml
+          base: main
+          branch: ${{ steps.version.outputs.release_branch }}
+          commit-message: "bump: prepare stable release ${{ steps.version.outputs.stable_version }}"
+          title: "chore: prepare stable release ${{ steps.version.outputs.stable_version }}"
+          body: |
+            ## Summary
+            - finalize `${{ steps.version.outputs.current_version }}` as `${{ steps.version.outputs.stable_version }}`
+            - update `pyproject.toml` and `CHANGELOG.md` from `next` without creating a tag
+            - prepare the stable release as a PR into `main`
+
+            ## Release flow
+            - `next` continues to own prerelease bumps and publishing
+            - merging this PR into `main` lets `publish.yml` create the stable tag/release and publish to PyPI without mutating `main`
+          delete-branch: false
+          draft: false
+
+      - name: Report PR
+        run: |
+          echo "Stable release PR: ${{ steps.cpr.outputs.pull-request-url }}"
