@@ -18,16 +18,17 @@ gh workflow run prepare-stable-release.yml --ref next
 
 ## Operational Notes
 - Stable release prep derives the final version from the current prerelease, for example `2.3.0rc15 -> 2.3.0`.
-- The prep workflow uses `cz bump <stable-version> --allow-no-commit --changelog --version-files-only --yes` so `pyproject.toml` and `CHANGELOG.md` are updated without creating a tag before the PR is merged.
+- The prep workflow uses `cz bump <stable-version> --changelog --files-only --yes`. In Commitizen `3.31.0`, `--files-only` updates `pyproject.toml` and `CHANGELOG.md` without creating the release commit or tag, and the older `--allow-no-commit` / `--version-files-only` flags are rejected.
 - `CHANGELOG.md` remains the source of truth for published release notes.
 
 ## Progress
 - [x] `publish.yml` keeps prerelease bumping on `next` and removes branch mutation from `main`.
 - [x] `prepare-stable-release.yml` prepares a stable version/changelog PR into `main`.
+- [x] Stable-release prep updated to match the Commitizen `3.31.0` CLI used by the repo.
 - [x] Release-flow documentation added for developers operating the branch strategy.
 
 ## Next Steps
-- Run the new `prepare-stable-release` workflow once after this change lands to verify repository permissions and branch naming in GitHub.
+- Re-run `prepare-stable-release` on `next` after this fix lands to confirm the PR branch is created cleanly with the current Commitizen CLI.
 - Consider adding `actionlint` to CI if workflow validation needs to become part of the automated test suite.
 
 ## Blockers & Risks

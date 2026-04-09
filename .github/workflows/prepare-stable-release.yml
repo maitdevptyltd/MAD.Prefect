@@ -57,9 +57,8 @@ jobs:
       - name: Finalize version files and changelog without tagging
         run: |
           poetry run cz bump "${{ steps.version.outputs.stable_version }}" \
-            --allow-no-commit \
             --changelog \
-            --version-files-only \
+            --files-only \
             --yes
 
       - name: Open or update stable release PR
