@@ -1,3 +1,9 @@
+## 2.3.0rc17 (2026-04-09)
+
+### Fix
+
+- **release**: align stable release workflow with commitizen 3.31
+
 ## 2.3.0rc16 (2026-04-09)
 
 ### Feat
