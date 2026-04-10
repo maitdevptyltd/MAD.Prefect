@@ -1,32 +1,20 @@
-## 2.3.0rc19 (2026-04-10)
+## 2.3.0 (2026-04-10)
 
-## 2.3.0rc18 (2026-04-10)
+### Feat
+
+- attribute templating (#22)
+- **data-assets**: add cache-first helper for asset reuse
+- asset manifest
+- update Python and dependency version constraints in pyproject.toml
+- Add support for parameterized queries (#21)
+- logging (#20)
+- add overloads for with_arguments method in FluentDataAssetConfigurator for robust type hints
+- create EnvBlock class to automatically load API credentials from a Prefect Block or environment variables (#18)
 
 ### Fix
 
 - revert version from 2.3.0rc16 to 2.2.0
-
-## 2.3.0rc17 (2026-04-09)
-
-### Fix
-
 - **release**: align stable release workflow with commitizen 3.31
-
-## 2.3.0rc16 (2026-04-09)
-
-### Feat
-
-- attribute templating (#22)
-- **data-assets**: add cache-first helper for asset reuse
-- asset manifest
-- update Python and dependency version constraints in pyproject.toml
-- Add support for parameterized queries (#21)
-- logging (#20)
-- add overloads for with_arguments method in FluentDataAssetConfigurator for robust type hints
-- create EnvBlock class to automatically load API credentials from a Prefect Block or environment variables (#18)
-
-### Fix
-
 - auto-register mad protocol during asset execution
 - update duckdb version constraint to allow versions <1.5
 - allow duckdb >= 1.3 by safe_truthy checks on duckdbpyrelations
@@ -51,121 +39,6 @@
 - skip redundant existence checks for artifacts in query
 - skip manifest update before asset run
 - read last materialized from asset manifest
-
-## 2.3.0rc15 (2025-12-12)
-
-### Feat
-
-- attribute templating (#22)
-
-## 2.3.0rc14 (2025-10-14)
-
-### Feat
-
-- **data-assets**: add cache-first helper for asset reuse
-
-## 2.3.0rc13 (2025-10-13)
-
-### Fix
-
-- auto-register mad protocol during asset execution
-
-## 2.3.0rc12 (2025-10-12)
-
-### Fix
-
-- update duckdb version constraint to allow versions <1.5
-
-## 2.3.0rc11 (2025-10-04)
-
-### Refactor
-
-- rename variable 'globs' to 'artifact_paths' for clarity in data artifact queries
-
-### Perf
-
-- skip redundant existence checks for artifacts in query
-- skip manifest update before asset run
-- read last materialized from asset manifest
-
-## 2.3.0rc10 (2025-10-04)
-
-### Feat
-
-- asset manifest
-
-### Refactor
-
-- extract asset metadata helper and add coverage
-
-## 2.3.0rc9 (2025-10-03)
-
-### Fix
-
-- allow duckdb >= 1.3 by safe_truthy checks on duckdbpyrelations
-- ensure DuckDB protocol reuses filesystem and prevent unnecessary registrations
-- memoize duckdb filesystem registration to prevent leaks
-
-## 2.3.0rc8 (2025-10-03)
-
-### Fix
-
-- resolve nested data asset template placeholders
-
-## 2.3.0rc7 (2025-09-29)
-
-### Feat
-
-- update Python and dependency version constraints in pyproject.toml
-
-## 2.3.0rc6 (2025-06-23)
-
-### Feat
-
-- Add support for parameterized queries (#21)
-
-## 2.3.0rc5 (2025-06-23)
-
-### Feat
-
-- logging (#20)
-
-## 2.3.0rc4 (2025-06-04)
-
-### Fix
-
-- update regex in _sanitize_name method to allow curly braces
-
-## 2.3.0rc3 (2025-05-20)
-
-### Fix
-
-- add return type annotation to with_arguments method
-
-## 2.3.0rc2 (2025-05-16)
-
-## 2.3.0rc1 (2025-05-13)
-
-### Feat
-
-- add overloads for with_arguments method in FluentDataAssetConfigurator for robust type hints
-
-### Fix
-
-- set asset_id in DataAssetRun during initialization
-- update __call__ method overloads in DataAsset to return DataArtifact for robust type hints
-
-### Refactor
-
-- migrate DataAsset callable logic to its own class
-- encapsulate with_options and with_arguments in confugrators
-- asset decorator as its own class, add DataAssetOptions instead of many options in data asset constructor
-
-## 2.3.0rc0 (2025-05-06)
-
-### Feat
-
-- create EnvBlock class to automatically load API credentials from a Prefect Block or environment variables (#18)
 
 ## 2.2.0 (2025-03-04)
 
