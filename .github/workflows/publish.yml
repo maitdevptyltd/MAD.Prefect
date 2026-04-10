@@ -8,77 +8,57 @@ on:
 
 jobs:
   release:
+    if: "!startsWith(github.event.head_commit.message, 'bump:')"
     # Branch strategy:
-    # - next: Commitizen may commit/tag prerelease bumps and update CHANGELOG.md
-    # - main: publish only from the version already merged via PR; never mutate main
+    # - next: Commitizen creates prerelease bumps, tags, changelog entries, and releases
+    # - main: Commitizen creates the final stable bump, tag, changelog entry, and release
+    #   using a dedicated bot token that is allowed to bypass the protected-branch rules
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
-      revision: ${{ steps.next_release.outputs.revision || steps.main_release.outputs.revision }}
+      revision: ${{ steps.next_cz.outputs.version || steps.main_cz.outputs.version }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out next
+        if: github.ref == 'refs/heads/next'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Python
+      - name: Check out main with release bot token
         if: github.ref == 'refs/heads/main'
-        uses: actions/setup-python@v5
+        uses: actions/checkout@v4
         with:
-          python-version: "3.11"
-          architecture: "x64"
-
-      - name: Install Poetry
-        if: github.ref == 'refs/heads/main'
-        uses: snok/install-poetry@v1
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Bump prerelease version and changelog
         if: github.ref == 'refs/heads/next'
-        id: cz
-        uses: commitizen-tools/commitizen-action@0.21.0
+        id: next_cz
+        uses: commitizen-tools/commitizen-action@0.27.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          commitizen_version: 4.13.9
           changelog_increment_filename: body.md
           prerelease: rc
 
-      - name: Capture prerelease revision
-        if: github.ref == 'refs/heads/next'
-        id: next_release
-        run: echo "revision=${{ steps.cz.outputs.version }}" >> "$GITHUB_OUTPUT"
-
-      - name: Read committed stable version
+      - name: Bump stable version and changelog
         if: github.ref == 'refs/heads/main'
-        id: committed_version
-        run: echo "revision=$(poetry version -s)" >> "$GITHUB_OUTPUT"
-
-      - name: Extract stable release notes from CHANGELOG.md
-        if: github.ref == 'refs/heads/main'
-        env:
-          VERSION: ${{ steps.committed_version.outputs.revision }}
-        run: |
-          awk -v header="## ${VERSION} (" '
-            index($0, header) == 1 { capture=1 }
-            capture && /^## / && index($0, header) != 1 { exit }
-            capture { print }
-          ' CHANGELOG.md > body.md
-
-          test -s body.md || {
-            echo "::error::Missing changelog entry for ${VERSION}"
-            exit 1
-          }
-
-      - name: Capture stable revision
-        if: github.ref == 'refs/heads/main'
-        id: main_release
-        run: echo "revision=${{ steps.committed_version.outputs.revision }}" >> "$GITHUB_OUTPUT"
+        id: main_cz
+        uses: commitizen-tools/commitizen-action@0.27.1
+        with:
+          github_token: ${{ secrets.RELEASE_PAT }}
+          commitizen_version: 4.13.9
+          changelog_increment_filename: body.md
 
       - name: Create prerelease GitHub release
         if: github.ref == 'refs/heads/next'
         uses: softprops/action-gh-release@v2
         with:
           body_path: body.md
-          tag_name: ${{ steps.cz.outputs.version }}
+          tag_name: ${{ steps.next_cz.outputs.version }}
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,8 +69,7 @@ jobs:
         with:
           body_path: body.md
           prerelease: false
-          tag_name: ${{ steps.committed_version.outputs.revision }}
-          target_commitish: ${{ github.sha }}
+          tag_name: ${{ steps.main_cz.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
