@@ -31,6 +31,15 @@ query_result = await generate_data.query("WHERE id > 1")
 cached_view = await generate_data.cache_first().query("SELECT * FROM data")
 ```
 
+DuckDB parameters can be passed through `query`. Use `ANY` when binding a list:
+
+```python
+selected = await generate_data.query(
+    "SELECT * WHERE id = ANY($ids)",
+    params={"ids": [1, 2]},
+)
+```
+
 In this example, `generate_data` is defined as a data asset using the `@asset` decorator. When executed, it automatically handles data persistence to the specified path, caching based on the `cache_expiration`, and allows querying the data without loading it entirely into memory.
 
 **Power of the Data Asset Pattern:**
@@ -411,6 +420,7 @@ export FILESYSTEM_BLOCK_NAME="my_s3_block"
 - **Artifacts:** Intermediate artifacts are stored in the `artifacts_dir`. If `snapshot_artifacts` is enabled, artifacts are stored with timestamps to allow historical data inspection.
 - **File Types:** Supports "json" and "parquet" file types for artifacts. Ensure consistency when querying multiple artifacts.
 - **Filesystem Integration:** Uses `fsspec` for filesystem abstraction, allowing interaction with various storage systems (local, S3, etc.).
+- **Nested JSON inference:** `ReadJsonOptions` leaves DuckDB's map-inference thresholds unset by default. Set `field_appearance_threshold` or `map_inference_threshold` explicitly only when a workflow requires a fixed `STRUCT` schema.
 
 ---
 

@@ -8,9 +8,10 @@ class ReadJsonOptions(BaseModel):
     maximum_object_size: Optional[int] = 33554432
     format: Optional[str] = "auto"
 
-    # By default, always try and parse a nested object as a struct
-    field_appearance_threshold: Optional[int] = 0
-    map_inference_threshold: Optional[int] = -1
+    # Defer nested-object inference to DuckDB. Callers can still override these
+    # thresholds when a fixed STRUCT schema is required.
+    field_appearance_threshold: Optional[float] = None
+    map_inference_threshold: Optional[int] = None
     sample_size: Optional[int] = -1
 
     columns: Optional[Dict[str, str]] = None
