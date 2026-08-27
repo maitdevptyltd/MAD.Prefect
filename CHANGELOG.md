@@ -1,3 +1,9 @@
+## 2.4.0rc0 (2026-08-27)
+
+### Feat
+
+- **dependencies**: support latest Prefect and DuckDB
+
 ## 2.3.0 (2026-04-10)
 
 ### Feat
