@@ -2,6 +2,10 @@
 
 The `mad_prefect` library introduces a powerful pattern for managing data within Prefect workflows using **data assets**. A data asset represents a unit of data that can be materialized, cached, and queried independently. By leveraging data assets, you can build modular, reusable, and maintainable data pipelines that are efficient and easy to reason about.
 
+MAD.Prefect supports Python 3.10 through 3.14, matching Prefect 3.8.4. See
+[Python support](docs/python-support.md) for the compatibility and validation
+contract.
+
 At the core of this pattern is the `@asset` decorator, which transforms a regular Python function into a data asset. This decorator handles the intricacies of data persistence, caching, artifact management, and provides querying capabilities using DuckDB.
 
 **Example:**

@@ -6,7 +6,7 @@ authors = ["MAIT DEV Pty Ltd <maitland@mait.dev>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.13"
+python = ">=3.10,<3.15"
 prefect = ">=2.18,<4"
 pandas = "^2.1.1"
 sshfs = "^2024.6.0"
