@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from functools import partial
 import hashlib
 import inspect
@@ -106,7 +106,7 @@ class DataAssetCallable(Generic[P, R]):
             )
             return self.result_artifacts[0]
 
-        asset_run.runtime = datetime.now(UTC)
+        asset_run.runtime = datetime.now(timezone.utc)
         self.last_materialized = await self._get_last_materialized(asset)
         logger.debug(
             f"Last materialization time for asset '{asset.name}': {self.last_materialized}"
@@ -186,7 +186,7 @@ class DataAssetCallable(Generic[P, R]):
         result_artifact_data = None
 
         # Record information about the run
-        asset_run.materialized = datetime.now(UTC)
+        asset_run.materialized = datetime.now(timezone.utc)
         duration = asset_run.materialized - asset_run.runtime
         asset_run.duration_miliseconds = int(duration.total_seconds() * 1000)
 
