@@ -113,6 +113,23 @@ async def test_loads_block_if_env_name_provided():
     assert result.token == "loaded"
 
 
+async def test_explicit_prefix_loads_named_credential_block():
+    class CredentialBlockPrefix(EnvBlock):
+        prefix: str | None = "CustomPrefix"
+        token: str
+
+        @classmethod
+        async def load(cls, name):
+            assert name == "saved-credentials"
+            return cls(token="loaded")
+
+    test_env = {"CUSTOMPREFIX_CREDENTIAL_BLOCK_NAME": "saved-credentials"}
+
+    result = await CredentialBlockPrefix.from_env(test_env)
+
+    assert result.token == "loaded"
+
+
 async def test_instances_are_isolated_per_subclass():
     class A(EnvBlock):
         token: str
@@ -136,7 +153,7 @@ async def test_instances_are_isolated_per_subclass():
 
 async def test_subclass_with_explicit_prefix():
     class ConfiguredPrefix(EnvBlock):
-        prefix: str = "CustomPrefix"
+        prefix: str | None = "CustomPrefix"
         token: str
 
     test_env = {
@@ -145,7 +162,22 @@ async def test_subclass_with_explicit_prefix():
     }
 
     block = await ConfiguredPrefix.from_env(test_env)
+
     assert block.token == "expected"
+    assert block.prefix == "CustomPrefix"
+    assert ConfiguredPrefix.resolve_prefix() == "CUSTOMPREFIX"
+
+
+def test_prefix_is_in_schema_and_serialized():
+    schema = DownstreamAPI.model_json_schema()
+    block = DownstreamAPI(
+        token="abc",
+        url="https://x.com",
+        secret=SecretStr("shhh"),
+    )
+
+    assert schema["properties"]["prefix"]["default"] is None
+    assert block.model_dump()["prefix"] is None
 
 
 async def test_successful_casting_of_standard_type():
@@ -187,7 +219,7 @@ async def test_secretstr_field_is_wrapped_correctly():
 
 async def test_union_field_casting_with_optional():
     class UnionBlock(EnvBlock):
-        prefix: str = "UnionTest"
+        prefix: str | None = "UnionTest"
         retries: int | str  # Union[int, str]
         region: None | str  # Optional[str]
         token: Optional[str]
