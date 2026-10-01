@@ -1,3 +1,9 @@
+## 2.4.0rc2 (2026-10-01)
+
+### Fix
+
+- **envblock**: align prefix with Pydantic model fields (#28)
+
 ## 2.4.0rc1 (2026-08-31)
 
 ### Feat
