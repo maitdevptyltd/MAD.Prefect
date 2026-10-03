@@ -351,14 +351,7 @@ class FsspecFileSystem(
 - `basepath`: The base path for the filesystem.
 - `storage_options`: Options for configuring the underlying filesystem (e.g., authentication credentials).
 
-The base path may end with a slash. Paths returned by `glob()` are relative to
-that base path and can be passed directly to `exists()` or `read_path()`:
-
-```python
-filesystem = FsspecFileSystem(basepath="file://./data/")
-for path in filesystem.glob("invoice/*.parquet"):
-    assert filesystem.exists(path)
-```
+See [Filesystem paths](docs/filesystems.md) for examples and path conventions.
 
 ---
 

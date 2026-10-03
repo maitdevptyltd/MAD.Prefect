@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock
 
 import fsspec
@@ -68,3 +69,32 @@ def test_glob_with_no_matches_returns_an_empty_list(monkeypatch: pytest.MonkeyPa
     filesystem = make_filesystem(monkeypatch, "example-container/service/", backend)
 
     assert filesystem.glob("invoice/*.parquet") == []
+
+
+@pytest.mark.parametrize(
+    ("url", "root"),
+    [
+        ("abfss://example-container/service/", "example-container/service/"),
+        ("file:///", "/"),
+        ("memory://", ""),
+    ],
+)
+@pytest.mark.parametrize("construction", ["constructor", "model", "json"])
+def test_configured_urls_are_preserved_across_validation_paths(
+    monkeypatch: pytest.MonkeyPatch, url: str, root: str, construction: str
+):
+    backend = Mock(spec=fsspec.AbstractFileSystem)
+    backend.glob.return_value = [f"{root.rstrip('/')}/invoice/data.parquet"]
+    monkeypatch.setattr(fsspec.core, "url_to_fs", Mock(return_value=(backend, root)))
+    configuration = {"basepath": url, "storage_options": {}}
+
+    if construction == "model":
+        filesystem = FsspecFileSystem.model_validate(configuration)
+    elif construction == "json":
+        filesystem = FsspecFileSystem.model_validate_json(json.dumps(configuration))
+    else:
+        filesystem = FsspecFileSystem(basepath=url)
+
+    assert filesystem.basepath == url
+    assert filesystem.model_dump()["basepath"] == url
+    assert filesystem.glob("invoice/*.parquet") == ["invoice/data.parquet"]
