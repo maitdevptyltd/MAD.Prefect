@@ -53,18 +53,20 @@ class FsspecFileSystem(
         )
 
         self._fs: fsspec.AbstractFileSystem = fs
-        self._fs_url: str = fs_url
+        # Listed paths and file access must use the same root, even when the
+        # storage driver preserves a trailing slash in the configured URL.
+        self._fs_url: str = fs_url.rstrip("/")
 
     def _resolve_path(self, path: str):
         # resolve the path relative to the basepath as supplied by fsspec
-        return f"{self._fs_url.rstrip('/')}/{path.lstrip('/')}"
+        return f"{self._fs_url}/{path.lstrip('/')}"
 
     def glob(self, path: str):
         # return relative paths to the basepath
         abs_paths = self._fs.glob(self._resolve_path(path))
 
         return [
-            cast(str, abs_path).replace(f"{self._fs_url}/", "")
+            cast(str, abs_path).removeprefix(f"{self._fs_url}/")
             for abs_path in abs_paths
         ]
 
