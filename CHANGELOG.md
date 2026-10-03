@@ -1,3 +1,9 @@
+## 2.4.0rc3 (2026-10-03)
+
+### Fix
+
+- **filesystems**: normalize relative glob paths (#29)
+
 ## 2.4.0rc2 (2026-10-01)
 
 ### Fix
