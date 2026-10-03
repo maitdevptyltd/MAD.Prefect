@@ -343,12 +343,15 @@ class FsspecFileSystem(
 - `write_path(self, path: str, content: bytes)`: Writes data to the specified path.
 - `read_path(self, path: str)`: Reads data from the specified path.
 - `exists(self, path: str)`: Checks if the path exists.
+- `glob(self, path: str)`: Lists matching paths relative to the configured base path.
 - `delete_path(self, path: str, recursive: bool = False)`: Deletes the specified path.
 
 **Configuration:**
 
 - `basepath`: The base path for the filesystem.
 - `storage_options`: Options for configuring the underlying filesystem (e.g., authentication credentials).
+
+See [Filesystem paths](docs/filesystems.md) for examples and path conventions.
 
 ---
 
