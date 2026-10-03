@@ -38,6 +38,9 @@ their own release boundary; it does not make interpreter upgrades automatic.
 
 - Keep the matrix and package metadata aligned when the pinned Prefect baseline
   changes.
+- Resolve the existing Pyright errors for `basepath` and `storage_options` in
+  `FsspecFileSystem`'s parent constructor. These are Pydantic model fields, but
+  Prefect's parent signature does not expose them to the type checker.
 
 ## Blockers & Risks
 

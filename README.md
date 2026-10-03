@@ -343,12 +343,22 @@ class FsspecFileSystem(
 - `write_path(self, path: str, content: bytes)`: Writes data to the specified path.
 - `read_path(self, path: str)`: Reads data from the specified path.
 - `exists(self, path: str)`: Checks if the path exists.
+- `glob(self, path: str)`: Lists matching paths relative to the configured base path.
 - `delete_path(self, path: str, recursive: bool = False)`: Deletes the specified path.
 
 **Configuration:**
 
 - `basepath`: The base path for the filesystem.
 - `storage_options`: Options for configuring the underlying filesystem (e.g., authentication credentials).
+
+The base path may end with a slash. Paths returned by `glob()` are relative to
+that base path and can be passed directly to `exists()` or `read_path()`:
+
+```python
+filesystem = FsspecFileSystem(basepath="file://./data/")
+for path in filesystem.glob("invoice/*.parquet"):
+    assert filesystem.exists(path)
+```
 
 ---
 
