@@ -21,8 +21,8 @@ T = TypeVar("T", bound="EnvBlock")
 
 
 class EnvBlock(Block):
-    # Optional prefix to customize environment variable names
-    prefix: ClassVar[Optional[str]] = None
+    # Keep the prefix as a model field so subclasses can override it safely.
+    prefix: str | None = None
 
     # Singleton instance cache
     _instance: ClassVar[Optional[Any]] = None

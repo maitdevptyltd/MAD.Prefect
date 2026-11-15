@@ -185,7 +185,7 @@ async def test_when_data_asset_yields_no_data():
     assert count_query_result[0] == 0
 
 
-async def test_nested_structs_with_many_keys_should_not_cast_to_string():
+async def test_nested_objects_with_many_keys_use_duckdb_map_inference():
     def generate_unique_dict(keys):
         return {f"{key}@somewhere.com": ["creator", "editor"] for key in keys}
 
@@ -220,9 +220,10 @@ async def test_nested_structs_with_many_keys_should_not_cast_to_string():
     # The second column is named data
     assert composed_query.description[1][0] == "data"
 
-    # And it not a string type
-    # duckdb GitHub Issue: https://github.com/duckdb/duckdb/issues/13734
-    assert composed_query.description[1][1] != "STRING"
+    # DuckDB should keep the nested values typed without constructing a huge
+    # STRUCT from keys that differ on every row.
+    # https://github.com/duckdb/duckdb/issues/13734
+    assert str(composed_query.description[1][1]) == "MAP(VARCHAR, VARCHAR[])"
 
 
 async def test_materialize_artifact_with_decimal():
@@ -919,14 +920,14 @@ async def test_query_with_named_parameters_in_list():
     inventory_artifact = await inventory_asset()
     assert inventory_artifact
 
-    # The query string uses the "$ids" named parameter
-    query_str = "SELECT * WHERE id IN $ids"
+    # ANY accepts the named list as a single bound parameter.
+    query_str = "SELECT * WHERE id = ANY($ids)"
 
     # The params are passed as a dictionary, mapping the name to the list
     params = {"ids": ids_to_find}
 
     # This will execute the final query:
-    # FROM artifact_query SELECT * WHERE id IN $ids
+    # FROM artifact_query SELECT * WHERE id = ANY($ids)
     result_query = await inventory_artifact.query(query_str, params=params)
     assert safe_truthy(result_query)
 

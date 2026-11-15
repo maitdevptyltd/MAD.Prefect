@@ -1,3 +1,27 @@
+## 2.4.0rc3 (2026-10-03)
+
+### Fix
+
+- **filesystems**: normalize relative glob paths (#29)
+
+## 2.4.0rc2 (2026-10-01)
+
+### Fix
+
+- **envblock**: align prefix with Pydantic model fields (#28)
+
+## 2.4.0rc1 (2026-08-31)
+
+### Feat
+
+- support Python 3.10 through 3.14 (#27)
+
+## 2.4.0rc0 (2026-08-27)
+
+### Feat
+
+- **dependencies**: support latest Prefect and DuckDB
+
 ## 2.3.0 (2026-04-10)
 
 ### Feat

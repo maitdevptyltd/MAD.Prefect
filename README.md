@@ -2,6 +2,10 @@
 
 The `mad_prefect` library introduces a powerful pattern for managing data within Prefect workflows using **data assets**. A data asset represents a unit of data that can be materialized, cached, and queried independently. By leveraging data assets, you can build modular, reusable, and maintainable data pipelines that are efficient and easy to reason about.
 
+MAD.Prefect supports Python 3.10 through 3.14, matching Prefect 3.8.4. See
+[Python support](docs/python-support.md) for the compatibility and validation
+contract.
+
 At the core of this pattern is the `@asset` decorator, which transforms a regular Python function into a data asset. This decorator handles the intricacies of data persistence, caching, artifact management, and provides querying capabilities using DuckDB.
 
 **Example:**
@@ -29,6 +33,15 @@ query_result = await generate_data.query("WHERE id > 1")
 
 # Reusing the cached artifact for ad-hoc analysis
 cached_view = await generate_data.cache_first().query("SELECT * FROM data")
+```
+
+DuckDB parameters can be passed through `query`. Use `ANY` when binding a list:
+
+```python
+selected = await generate_data.query(
+    "SELECT * WHERE id = ANY($ids)",
+    params={"ids": [1, 2]},
+)
 ```
 
 In this example, `generate_data` is defined as a data asset using the `@asset` decorator. When executed, it automatically handles data persistence to the specified path, caching based on the `cache_expiration`, and allows querying the data without loading it entirely into memory.
@@ -330,12 +343,15 @@ class FsspecFileSystem(
 - `write_path(self, path: str, content: bytes)`: Writes data to the specified path.
 - `read_path(self, path: str)`: Reads data from the specified path.
 - `exists(self, path: str)`: Checks if the path exists.
+- `glob(self, path: str)`: Lists matching paths relative to the configured base path.
 - `delete_path(self, path: str, recursive: bool = False)`: Deletes the specified path.
 
 **Configuration:**
 
 - `basepath`: The base path for the filesystem.
 - `storage_options`: Options for configuring the underlying filesystem (e.g., authentication credentials).
+
+See [Filesystem paths](docs/filesystems.md) for examples and path conventions.
 
 ---
 
@@ -411,6 +427,7 @@ export FILESYSTEM_BLOCK_NAME="my_s3_block"
 - **Artifacts:** Intermediate artifacts are stored in the `artifacts_dir`. If `snapshot_artifacts` is enabled, artifacts are stored with timestamps to allow historical data inspection.
 - **File Types:** Supports "json" and "parquet" file types for artifacts. Ensure consistency when querying multiple artifacts.
 - **Filesystem Integration:** Uses `fsspec` for filesystem abstraction, allowing interaction with various storage systems (local, S3, etc.).
+- **Nested JSON inference:** `ReadJsonOptions` leaves DuckDB's map-inference thresholds unset by default. Set `field_appearance_threshold` or `map_inference_threshold` explicitly only when a workflow requires a fixed `STRUCT` schema.
 
 ---
 

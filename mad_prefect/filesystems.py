@@ -62,9 +62,10 @@ class FsspecFileSystem(
     def glob(self, path: str):
         # return relative paths to the basepath
         abs_paths = self._fs.glob(self._resolve_path(path))
+        root_prefix = self._resolve_path("")
 
         return [
-            cast(str, abs_path).replace(f"{self._fs_url}/", "")
+            cast(str, abs_path).removeprefix(root_prefix)
             for abs_path in abs_paths
         ]
 
