@@ -15,9 +15,12 @@ participating processes. It does not allow an immediate burst of 40 requests.
 The implementation converts the rate to the per-second value Prefect expects.
 
 The name identifies the **API account's allowance**, not a process or deployment.
-All callers sharing that allowance must use the same name, rate and Prefect server.
+All callers sharing that allowance use the same name and Prefect server.
 If one caller specifies 40 and another specifies 50 under the same name, the
-second caller fails when checking the existing limit. It never overwrites it.
+second caller logs a warning and updates the shared limit to 50 requests per minute.
+Differing capacity or active settings also trigger a warning and an update to
+capacity one and active status. The latest successful setup update takes effect
+for all callers using that limit.
 Different Prefect servers do not coordinate, even with matching names.
 
 For HTTPX, use [the transport adapter](http-retries.md) so every actual attempt,
@@ -32,7 +35,7 @@ to contact Prefect, use `max_attempts=3`. The default is four total attempts,
 including the first. This setting never retries a downstream API request.
 
 Temporary network failures, HTTP timeouts, protocol errors and HTTP
-500/502/503/504 responses can be retried. Missing limits, incompatible settings,
+500/502/503/504 responses can be retried. Missing limits during acquisition,
 authentication errors and cancellation stop the operation. Retry delays start at
 one second, double up to ten seconds and include jitter to spread reconnecting pods.
 These delay settings are internal rather than part of the constructor.
@@ -54,7 +57,7 @@ URLs, credentials or exception messages. No per-request Prefect tasks are create
 ## Setup and reuse
 
 Reuse the limiter instance across requests. On the first call it creates a missing
-limit with capacity one, or checks an existing limit. Successful setup is cached;
+limit with capacity one, or checks and updates an existing limit as needed. Successful setup is cached;
 later calls only acquire allowances. A lock prevents simultaneous first calls
 from repeating setup. This is ordinary Python state, with no Pydantic model,
 Field declarations or PrivateAttr bookkeeping in the limiter.
@@ -74,7 +77,8 @@ Use the provider's documented allowance, allowing headroom for other integration
 ## Progress
 
 Plain Python limiter, minute-based input, cached setup and Prefect recovery are
-implemented. KnowBe4 uses 40 requests per minute. Tests use synthetic data.
+implemented, including warning and updating when shared settings differ.
+KnowBe4 uses 40 requests per minute. Tests use synthetic data.
 
 ## Next Steps
 

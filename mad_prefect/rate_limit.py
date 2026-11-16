@@ -19,7 +19,7 @@ from httpx import (
     Response,
 )
 from prefect.client.orchestration import get_client
-from prefect.client.schemas.actions import GlobalConcurrencyLimitCreate
+from prefect.client.schemas.actions import GlobalConcurrencyLimitCreate, GlobalConcurrencyLimitUpdate
 from prefect.concurrency.asyncio import rate_limit
 from prefect.concurrency._asyncio import ConcurrencySlotAcquisitionError
 from prefect.exceptions import MissingContextError, ObjectNotFound
@@ -106,9 +106,8 @@ class PrefectRateLimiter:
     async def _create_or_check_prefect_limit(self) -> None:
         """Read the named Prefect limit, creating it if it does not exist.
 
-        Require an active limit with capacity one and the requested decay rate.
-        Return None if those settings match; raise ValueError if they differ.
-        Never change an existing limit because other deployments may be using it.
+        Warn and update differing settings to an active limit with capacity one
+        and the requested decay rate. The update applies to all shared callers.
         """
         # This client talks to the Prefect server, not the downstream API. Setup
         # happens once per limiter so ordinary requests only acquire an allowance.
@@ -133,8 +132,7 @@ class PrefectRateLimiter:
                         raise
                 limit = await client.read_global_concurrency_limit_by_name(self.name)
 
-            # The same account name must mean the same rate in every deployment.
-            # Fail on a mismatch instead of overwriting another caller's settings.
+            # Make changes visible because this allowance is shared across callers.
             if (
                 not limit.active
                 or limit.limit != 1
@@ -142,7 +140,23 @@ class PrefectRateLimiter:
                     limit.slot_decay_per_second, self.requests_per_minute / 60, rel_tol=1e-6
                 )
             ):
-                raise ValueError(f"Prefect rate limit {self.name!r} has incompatible settings")
+                try:
+                    logger = get_run_logger()
+                except MissingContextError:
+                    logger = logging.getLogger(__name__)
+                logger.warning(
+                    "Prefect rate limit %s has different settings; updating to active=True, "
+                    "capacity=1, requests_per_minute=%d",
+                    self.name, self.requests_per_minute,
+                )
+                await client.update_global_concurrency_limit(
+                    self.name,
+                    GlobalConcurrencyLimitUpdate(
+                        active=True,
+                        limit=1,
+                        slot_decay_per_second=self.requests_per_minute / 60,
+                    ),
+                )
 
 
 class RateLimitedAsyncTransport(AsyncBaseTransport):

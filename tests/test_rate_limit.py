@@ -35,6 +35,7 @@ async def test_existing_limit_is_checked_once_per_instance(backend):
     await rate.acquire()
     assert client.read_global_concurrency_limit_by_name.await_count == 1
     client.create_global_concurrency_limit.assert_not_called()
+    client.update_global_concurrency_limit.assert_not_called()
     assert acquire.await_count == 2
     acquire.assert_awaited_with("test-account", occupy=1, strict=True, timeout_seconds=120)
 
@@ -58,13 +59,21 @@ async def test_creates_missing_limit_and_handles_another_pod_creating_it(backend
 
 
 @pytest.mark.parametrize("field,value", [("active", False), ("limit", 2), ("slot_decay_per_second", 2)])
-async def test_mismatched_configuration_fails_without_acquiring_or_overwriting(backend, field, value):
+async def test_mismatched_configuration_warns_and_updates_before_acquiring(backend, field, value, caplog):
     client, acquire = backend
     setattr(client.read_global_concurrency_limit_by_name.return_value, field, value)
-    with pytest.raises(ValueError, match="incompatible"):
-        await limiter().acquire()
-    acquire.assert_not_called()
-    client.update_global_concurrency_limit.assert_not_called()
+    async def check_update(*args, **kwargs):
+        acquire.assert_not_awaited()
+    client.update_global_concurrency_limit.side_effect = check_update
+    rate = limiter()
+    await rate.acquire()
+    await rate.acquire()
+    client.update_global_concurrency_limit.assert_awaited_once()
+    name, settings = client.update_global_concurrency_limit.call_args.args
+    assert name == "test-account"
+    assert (settings.active, settings.limit, settings.slot_decay_per_second) == (True, 1, 2 / 3)
+    assert "test-account has different settings; updating" in caplog.text
+    assert acquire.await_count == 2
 
 
 async def test_backend_failure_prevents_acquisition(backend):
@@ -152,16 +161,29 @@ async def test_instances_validate_independently(backend):
     assert acquire.await_count == 2
 
 
-async def test_same_name_with_a_different_rate_fails_without_overwriting(backend):
-    """A second caller cannot silently change the shared account's rate."""
+async def test_same_name_with_a_different_rate_updates_shared_settings(backend):
     client, acquire = backend
     await PrefectRateLimiter(name="test-account", requests_per_minute=40).acquire()
 
-    with pytest.raises(ValueError, match="incompatible"):
-        await PrefectRateLimiter(name="test-account", requests_per_minute=50).acquire()
+    await PrefectRateLimiter(name="test-account", requests_per_minute=50).acquire()
 
+    assert acquire.await_count == 2
+    client.update_global_concurrency_limit.assert_awaited_once()
+    assert client.update_global_concurrency_limit.call_args.args[1].slot_decay_per_second == 50 / 60
+
+
+async def test_failed_update_prevents_acquisition_and_is_not_cached(backend):
+    client, acquire = backend
+    client.read_global_concurrency_limit_by_name.return_value.active = False
+    client.update_global_concurrency_limit.side_effect = [OSError("unavailable"), None]
+    rate = limiter()
+    with pytest.raises(OSError):
+        await rate.acquire()
+    acquire.assert_not_awaited()
+
+    await rate.acquire()
+    assert client.update_global_concurrency_limit.await_count == 2
     acquire.assert_awaited_once()
-    client.update_global_concurrency_limit.assert_not_called()
 
 
 @pytest.mark.parametrize("requests_per_minute", [0, -1])
