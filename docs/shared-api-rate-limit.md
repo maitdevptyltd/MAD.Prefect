@@ -1,9 +1,9 @@
 # Shared API rate limits
 
 ```python
-from mad_prefect.rate_limit import ApiRateLimit
+from mad_prefect.rate_limit import PrefectRateLimiter
 
-limiter = ApiRateLimit(name="knowbe4-account", requests_per_minute=40)
+limiter = PrefectRateLimiter(name="knowbe4-account", requests_per_minute=40)
 await limiter.acquire()
 # Send one API request here.
 ```
@@ -90,7 +90,7 @@ when retried, reducing throughput without permitting an unconfirmed API request.
 
 ## Reading acquisition and retries separately
 
-`ApiRateLimit.acquire()` in `rate_limit.py` defines its acquisition steps in a
+`PrefectRateLimiter.acquire()` in `rate_limit.py` defines its acquisition steps in a
 local `obtain_allowance()` function, then explicitly passes that operation to
 `retry()`. The acquisition steps check setup and ask Prefect for an allowance.
 Successful setup remains cached between attempts.

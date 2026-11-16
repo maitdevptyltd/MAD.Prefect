@@ -2,9 +2,9 @@
 
 ```python
 import httpx
-from mad_prefect.rate_limit import ApiRateLimit, RateLimitedAsyncTransport
+from mad_prefect.rate_limit import PrefectRateLimiter, RateLimitedAsyncTransport
 
-limit = ApiRateLimit(name="provider-account", requests_per_minute=40)
+limit = PrefectRateLimiter(name="provider-account", requests_per_minute=40)
 paced = RateLimitedAsyncTransport(limit)
 
 async with httpx.AsyncClient(transport=paced) as client:
@@ -63,7 +63,7 @@ does not cover subsequent attempts.
 
 ## Two different failures
 
-`ApiRateLimit.acquire()` retries temporary failures while contacting Prefect.
+`PrefectRateLimiter.acquire()` retries temporary failures while contacting Prefect.
 Those retries are bounded and logged by MAD.Prefect. If acquisition ultimately
 fails, the transport raises `RateLimitAcquisitionError` and sends no API request.
 The original error is its `__cause__`. This separate exception prevents HTTPX

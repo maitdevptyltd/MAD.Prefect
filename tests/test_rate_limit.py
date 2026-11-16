@@ -7,7 +7,7 @@ import pytest
 from prefect.exceptions import ObjectNotFound
 
 import mad_prefect.rate_limit as module
-from mad_prefect.rate_limit import ApiRateLimit
+from mad_prefect.rate_limit import PrefectRateLimiter
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def backend(monkeypatch):
 
 
 def limiter(**kwargs):
-    return ApiRateLimit(name="test-account", requests_per_minute=40, **kwargs)
+    return PrefectRateLimiter(name="test-account", requests_per_minute=40, **kwargs)
 
 
 async def test_existing_limit_is_checked_once_per_instance(backend):
@@ -155,10 +155,10 @@ async def test_instances_validate_independently(backend):
 async def test_same_name_with_a_different_rate_fails_without_overwriting(backend):
     """A second caller cannot silently change the shared account's rate."""
     client, acquire = backend
-    await ApiRateLimit(name="test-account", requests_per_minute=40).acquire()
+    await PrefectRateLimiter(name="test-account", requests_per_minute=40).acquire()
 
     with pytest.raises(ValueError, match="incompatible"):
-        await ApiRateLimit(name="test-account", requests_per_minute=50).acquire()
+        await PrefectRateLimiter(name="test-account", requests_per_minute=50).acquire()
 
     acquire.assert_awaited_once()
     client.update_global_concurrency_limit.assert_not_called()
@@ -167,4 +167,4 @@ async def test_same_name_with_a_different_rate_fails_without_overwriting(backend
 @pytest.mark.parametrize("requests_per_minute", [0, -1])
 def test_rejects_non_positive_rate(requests_per_minute):
     with pytest.raises(ValueError, match="requests_per_minute must be greater than zero"):
-        ApiRateLimit(name="test-account", requests_per_minute=requests_per_minute)
+        PrefectRateLimiter(name="test-account", requests_per_minute=requests_per_minute)

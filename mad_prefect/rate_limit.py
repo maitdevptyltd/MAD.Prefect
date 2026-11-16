@@ -27,7 +27,7 @@ from prefect.logging import get_run_logger
 from prefect.settings import PREFECT_API_URL
 
 
-class ApiRateLimit:
+class PrefectRateLimiter:
     """Share request spacing between processes using the same Prefect server.
 
     Use one non-secret name per provider account and reuse this instance across
@@ -154,7 +154,7 @@ class RateLimitedAsyncTransport(AsyncBaseTransport):
     """
 
     def __init__(
-        self, limiter: ApiRateLimit, transport: AsyncBaseTransport | None = None,
+        self, limiter: PrefectRateLimiter, transport: AsyncBaseTransport | None = None,
     ) -> None:
         """Use a fresh HTTPX network transport unless the caller supplies one."""
         self.limiter = limiter
