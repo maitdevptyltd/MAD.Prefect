@@ -50,6 +50,9 @@ class ApiRateLimit:
         apart across all callers using this name on the same Prefect server.
         max_attempts includes the first attempt and affects only Prefect calls.
         """
+        if requests_per_minute <= 0:
+            raise ValueError("requests_per_minute must be greater than zero")
+
         if max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
 

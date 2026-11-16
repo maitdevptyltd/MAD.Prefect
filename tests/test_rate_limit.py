@@ -162,3 +162,9 @@ async def test_same_name_with_a_different_rate_fails_without_overwriting(backend
 
     acquire.assert_awaited_once()
     client.update_global_concurrency_limit.assert_not_called()
+
+
+@pytest.mark.parametrize("requests_per_minute", [0, -1])
+def test_rejects_non_positive_rate(requests_per_minute):
+    with pytest.raises(ValueError, match="requests_per_minute must be greater than zero"):
+        ApiRateLimit(name="test-account", requests_per_minute=requests_per_minute)

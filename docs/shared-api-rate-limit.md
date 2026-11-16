@@ -9,7 +9,8 @@ await limiter.acquire()
 ```
 
 Supply a name for the account's shared allowance and its requests per minute as
-an integer. `40` means requests are spaced about 1.5 seconds apart, across all
+a positive integer. Zero and negative rates raise `ValueError` at construction.
+`40` means requests are spaced about 1.5 seconds apart, across all
 participating processes. It does not allow an immediate burst of 40 requests.
 The implementation converts the rate to the per-second value Prefect expects.
 
