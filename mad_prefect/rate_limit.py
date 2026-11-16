@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 
 from httpx import (
     AsyncBaseTransport,
+    AsyncHTTPTransport,
     HTTPStatusError,
     NetworkError,
     RemoteProtocolError,
@@ -152,10 +153,12 @@ class RateLimitedAsyncTransport(AsyncBaseTransport):
     Closing this transport also closes its wrapped transport.
     """
 
-    def __init__(self, limiter: ApiRateLimit, transport: AsyncBaseTransport) -> None:
-        """Accept the limiter and network transport without selecting a retry library."""
+    def __init__(
+        self, limiter: ApiRateLimit, transport: AsyncBaseTransport | None = None,
+    ) -> None:
+        """Use a fresh HTTPX network transport unless the caller supplies one."""
         self.limiter = limiter
-        self.transport = transport
+        self.transport = transport if transport is not None else AsyncHTTPTransport()
 
     async def handle_async_request(self, request: Request) -> Response:
         """Obtain a Prefect allowance, then return the downstream HTTP response.

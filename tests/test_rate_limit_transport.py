@@ -1,12 +1,41 @@
 """The shared transport paces attempts without choosing an HTTP retry policy."""
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
 
 from mad_prefect.rate_limit import RateLimitedAsyncTransport, RateLimitAcquisitionError
+
+
+async def test_default_transport_is_created_per_adapter_and_closed(monkeypatch):
+    networks = [AsyncMock(spec=httpx.AsyncBaseTransport) for _ in range(2)]
+    factory = Mock(side_effect=networks)
+    monkeypatch.setattr('mad_prefect.rate_limit.AsyncHTTPTransport', factory)
+
+    first = RateLimitedAsyncTransport(AsyncMock())
+    second = RateLimitedAsyncTransport(AsyncMock())
+    assert first.transport is networks[0]
+    assert second.transport is networks[1]
+    await first.aclose()
+    await second.aclose()
+
+    assert factory.call_count == 2
+    factory.assert_called_with()
+    for network in networks:
+        network.aclose.assert_awaited_once()
+
+
+def test_custom_transport_does_not_create_default_transport(monkeypatch):
+    factory = Mock()
+    monkeypatch.setattr('mad_prefect.rate_limit.AsyncHTTPTransport', factory)
+    network = AsyncMock(spec=httpx.AsyncBaseTransport)
+
+    transport = RateLimitedAsyncTransport(AsyncMock(), network)
+
+    assert transport.transport is network
+    factory.assert_not_called()
 
 
 async def test_plain_client_acquires_before_sending_and_does_not_retry():

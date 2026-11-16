@@ -5,8 +5,7 @@ import httpx
 from mad_prefect.rate_limit import ApiRateLimit, RateLimitedAsyncTransport
 
 limit = ApiRateLimit(name="provider-account", requests_per_minute=40)
-network = httpx.AsyncHTTPTransport(retries=0)
-paced = RateLimitedAsyncTransport(limit, network)
+paced = RateLimitedAsyncTransport(limit)
 
 async with httpx.AsyncClient(transport=paced) as client:
     response = await client.get("https://api.example.com/users")
@@ -17,6 +16,11 @@ This client has shared rate limiting and no HTTP retries. MAD.Prefect supplies
 the allowance and the small transport adapter. Your repository chooses whether
 to retry, which failures qualify, and how long to wait.
 
+The adapter creates a fresh `httpx.AsyncHTTPTransport()` by default. To supply
+custom network settings or a test transport, pass
+`RateLimitedAsyncTransport(limit, transport=network)`. Closing the adapter closes
+either the default or supplied transport.
+
 ## Using httpx-retries
 
 Install `httpx-retries` in the consuming repository, then wrap the paced transport:
@@ -24,9 +28,8 @@ Install `httpx-retries` in the consuming repository, then wrap the paced transpo
 ```python
 from httpx_retries import Retry, RetryTransport
 
-# Reuse the limiter, but create a fresh network transport for each client.
-network = httpx.AsyncHTTPTransport(retries=0)
-paced = RateLimitedAsyncTransport(limit, network)
+# Reuse the limiter, but create a fresh adapter for each client.
+paced = RateLimitedAsyncTransport(limit)
 retrying = RetryTransport(
     transport=paced,
     retry=Retry(total=2, allowed_methods=["GET", "HEAD"], backoff_factor=0.5),
