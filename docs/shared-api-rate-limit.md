@@ -9,7 +9,12 @@ await limiter.acquire()
 ```
 
 Supply a name for the account's shared allowance and its requests per minute as
-a positive integer. Zero and negative rates raise `ValueError` at construction.
+a positive integer. Both `requests_per_minute` and `max_attempts` must be positive
+integers. The limiter is a Pydantic `BaseModel` constructed with keyword arguments.
+Pydantic handles integer parsing and rejects fractional values. Zero and negative
+values retain the explicit messages `requests_per_minute must be greater than zero`
+and `max_attempts must be at least 1`, reported in a `ValidationError` (a `ValueError`
+subclass) at construction, before contacting Prefect.
 `40` means requests are spaced about 1.5 seconds apart, across all
 participating processes. It does not allow an immediate burst of 40 requests.
 The implementation converts the rate to the per-second value Prefect expects.
@@ -76,8 +81,8 @@ URLs, credentials or exception messages. No per-request Prefect tasks are create
 Reuse the limiter instance across requests. On the first call it creates a missing
 limit with capacity one, or checks and updates an existing limit as needed. Successful setup is cached;
 later calls only acquire allowances. A lock prevents simultaneous first calls
-from repeating setup. This is ordinary Python state, with no Pydantic model,
-Field declarations or PrivateAttr bookkeeping in the limiter.
+from repeating setup. Pydantic validates the settings; the cached setup flag and
+lock are private attributes, separate for each instance and excluded from serialization.
 
 Stop consumers before changing the rate or server, then create fresh instances.
 The instance does not poll for changes or recheck settings after successful setup.
@@ -93,7 +98,7 @@ Use the provider's documented allowance, allowing headroom for other integration
 
 ## Progress
 
-Plain Python limiter, minute-based input, cached setup and Prefect recovery are
+Pydantic limiter, minute-based input, cached setup and Prefect recovery are
 implemented, including warning and updating when shared settings differ.
 KnowBe4 uses 40 requests per minute. Tests use synthetic data.
 

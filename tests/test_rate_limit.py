@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from prefect.exceptions import ObjectNotFound
+from pydantic import ValidationError
 
 import mad_prefect.rate_limit as module
 from mad_prefect.rate_limit import PrefectRateLimiter
@@ -186,7 +187,40 @@ async def test_failed_update_prevents_acquisition_and_is_not_cached(backend):
     acquire.assert_awaited_once()
 
 
-@pytest.mark.parametrize("requests_per_minute", [0, -1])
-def test_rejects_non_positive_rate(requests_per_minute):
-    with pytest.raises(ValueError, match="requests_per_minute must be greater than zero"):
-        PrefectRateLimiter(name="test-account", requests_per_minute=requests_per_minute)
+@pytest.mark.parametrize("field", ["requests_per_minute", "max_attempts"])
+@pytest.mark.parametrize("value", [0, -1, 0.5, 1.5])
+def test_rejects_invalid_settings_at_construction(backend, field, value):
+    client, acquire = backend
+    settings = {"requests_per_minute": 40, "max_attempts": 4, field: value}
+    with pytest.raises(ValidationError, match=field):
+        PrefectRateLimiter(name="test-account", **settings)
+    client.read_global_concurrency_limit_by_name.assert_not_called()
+    acquire.assert_not_called()
+
+
+def test_accepts_positive_integer_settings_and_default_attempts():
+    rate = PrefectRateLimiter(name="test-account", requests_per_minute=1, max_attempts=1)
+    assert rate.requests_per_minute == 1
+    assert rate.max_attempts == 1
+    assert PrefectRateLimiter(name="test-account", requests_per_minute=40).max_attempts == 4
+
+
+def test_instances_have_separate_setup_state():
+    first = limiter()
+    second = limiter()
+    first._configuration_checked = True
+    assert second._configuration_checked is False
+    assert first._setup_lock is not second._setup_lock
+    assert first.model_dump() == {
+        "name": "test-account", "requests_per_minute": 40, "max_attempts": 4,
+    }
+
+
+@pytest.mark.parametrize("field,value,message", [
+    ("requests_per_minute", 0, "requests_per_minute must be greater than zero"),
+    ("max_attempts", 0, "max_attempts must be at least 1"),
+])
+def test_positive_settings_keep_clear_error_messages(field, value, message):
+    settings = {"requests_per_minute": 40, "max_attempts": 4, field: value}
+    with pytest.raises(ValidationError, match=message):
+        PrefectRateLimiter(name="test-account", **settings)

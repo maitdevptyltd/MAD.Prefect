@@ -8,6 +8,8 @@ import random
 import math
 from collections.abc import Awaitable, Callable
 
+from pydantic import BaseModel, PrivateAttr, model_validator
+
 from httpx import (
     AsyncBaseTransport,
     AsyncHTTPTransport,
@@ -27,7 +29,7 @@ from prefect.logging import get_run_logger
 from prefect.settings import PREFECT_API_URL
 
 
-class PrefectRateLimiter:
+class PrefectRateLimiter(BaseModel):
     """Share request spacing between processes using the same Prefect server.
 
     Use one non-secret name per provider account and reuse this instance across
@@ -39,32 +41,19 @@ class PrefectRateLimiter:
     requests_per_minute: int
     # Total attempts to obtain an allowance from Prefect after temporary failures.
     # Includes the first attempt; does not retry downstream API requests.
-    max_attempts: int
+    max_attempts: int = 4
 
-    _configuration_checked: bool
-    _setup_lock: asyncio.Lock
+    # Cache successful setup and serialize concurrent first requests per instance.
+    _configuration_checked: bool = PrivateAttr(default=False)
+    _setup_lock: asyncio.Lock = PrivateAttr(default_factory=asyncio.Lock)
 
-    def __init__(self, name: str, requests_per_minute: int, *, max_attempts: int = 4) -> None:
-        """Set the account's shared rate and the maximum Prefect connection attempts.
-
-        For example, requests_per_minute=40 spaces requests about 1.5 seconds
-        apart across all callers using this name on the same Prefect server.
-        max_attempts includes the first attempt and affects only Prefect calls.
-        """
-        if requests_per_minute <= 0:
+    @model_validator(mode="after")
+    def validate_inputs(self) -> PrefectRateLimiter:
+        if self.requests_per_minute <= 0:
             raise ValueError("requests_per_minute must be greater than zero")
-
-        if max_attempts < 1:
+        if self.max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
-
-        self.name = name
-        self.requests_per_minute = requests_per_minute
-        self.max_attempts = max_attempts
-
-        # Reuse successful setup. The lock stops concurrent first requests from
-        # checking or creating the same limit more than once in this instance.
-        self._configuration_checked = False
-        self._setup_lock = asyncio.Lock()
+        return self
 
     async def acquire(self) -> None:
         """Check setup once, then ask Prefect for one rate-limit allowance.
