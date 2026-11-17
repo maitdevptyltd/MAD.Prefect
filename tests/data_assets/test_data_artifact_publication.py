@@ -24,6 +24,9 @@ def publication(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(data_artifact.duckdb, "DuckDBPyRelation", relation_type)
     artifact = DataArtifact("logs.parquet", relation_type())
     monkeypatch.setattr(artifact, "_truthy", lambda data: True)
+    catalog = Mock()
+    catalog.fetchone.return_value = None
+    monkeypatch.setattr(data_artifact.duckdb, "sql", Mock(return_value=catalog))
     staged: list[Path] = []
 
     def export(query: str, parameters: list[str]):

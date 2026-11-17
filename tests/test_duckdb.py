@@ -121,6 +121,26 @@ async def test_published_relation_can_be_overwritten(sample_parquet):
         ).fetchall() == [(1 + increment,), (2 + increment,), (3 + increment,)]
 
 
+@pytest.mark.parametrize("object_type", ["TABLE", "VIEW"])
+@pytest.mark.parametrize("name", ["_relation", "_RELATION"])
+async def test_publication_rejects_shadowing_database_object(sample_parquet, object_type, name):
+    from mad_prefect.data_assets.data_artifact import DataArtifact
+
+    destination = sample_parquet / "published.parquet"
+    destination.write_bytes(b"previous complete output")
+    duckdb.execute(f"CREATE {object_type} {name} AS SELECT 99 AS value")
+    try:
+        artifact = DataArtifact("published.parquet", duckdb.sql("SELECT 42 AS value"))
+        with pytest.raises(ValueError, match="would override the supplied data"):
+            await artifact.persist()
+        assert destination.read_bytes() == b"previous complete output"
+        assert not artifact.persisted
+        assert artifact.data is not None
+        assert duckdb.sql(f"SELECT * FROM {name}").fetchall() == [(99,)]
+    finally:
+        duckdb.execute(f"DROP {object_type} {name}")
+
+
 def test_register_fsspec_filesystem_is_idempotent(monkeypatch, tmp_path):
     from mad_prefect import duckdb as mad_duckdb
     from mad_prefect.filesystems import FsspecFileSystem

@@ -64,6 +64,17 @@ class DataArtifact:
         # duckdb.query("SET preserve_insertion_order = false;")
 
         if isinstance(self.data, duckdb.DuckDBPyRelation):
+            # DuckDB resolves database tables before Python variables; refuse to export the wrong data.
+            collision = duckdb.sql(
+                "SELECT table_name FROM duckdb_tables() WHERE lower(table_name) = '_relation' "
+                "UNION ALL SELECT view_name FROM duckdb_views() WHERE lower(view_name) = '_relation'"
+            ).fetchone()
+            if collision:
+                raise ValueError(
+                    "Cannot publish this relation: a DuckDB table or view named '_relation' "
+                    "would override the supplied data. Rename that table or view before publishing."
+                )
+
             fs = await get_fs()
             protocol = (
                 fs._fs.protocol
