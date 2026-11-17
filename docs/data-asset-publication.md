@@ -7,11 +7,17 @@ async def logs():
 ```
 
 DuckDB relation results are written completely to a temporary local file before
-replacing the published file. A failed query or serialization leaves the old
-output untouched. Local outputs use `os.replace` on the same filesystem. Remote
+replacing the published file. A failed query or serialization during publication
+leaves the existing output untouched. Local outputs use `os.replace` on the same filesystem. Remote
 outputs use the configured filesystem's `put_file` without deleting the old file
 first. Azure's block-blob upload commits the replacement after uploading its
 blocks, avoiding DuckDB's delete-then-copy replacement.
+
+This protection starts at publication. With `snapshot_artifacts=False`, asset
+execution first deletes its artifact directory recursively. Keep the published
+file outside a custom `artifacts_dir`: for example, `artifacts_dir="bronze"`
+would delete `bronze/logs.parquet` before publication begins. The default artifact
+directory is separate from the published file in the example above.
 
 This preserves the reason for the earlier workaround: DuckDB's temporary-path
 handling fails when overwriting through the `mad://` wrapper. Previously the
@@ -28,7 +34,7 @@ so recursive `*.parquet`, `*.csv` and `*.json` searches exclude unfinished outpu
 
 - Publication refuses an existing DuckDB table or view named `_relation`
   (case-insensitive), which would otherwise override the supplied Python relation.
-  Rename the conflicting object before retrying; the previous output stays intact.
+  Rename the conflicting object before retrying; publication leaves any existing output intact.
 - Relation publication stages a complete file before replacing the output.
 - Focused tests cover export failure, upload failure, local replacement failure,
   successful replacement and temporary-file cleanup.
