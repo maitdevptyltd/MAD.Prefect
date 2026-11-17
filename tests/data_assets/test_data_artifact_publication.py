@@ -118,3 +118,22 @@ async def test_local_replacement_preserves_old_file_until_commit(
 
     assert not staged[0].exists()
     backend.put_file.assert_not_called()
+
+
+@pytest.mark.parametrize("filetype", ["parquet", "csv", "json"])
+async def test_temporary_output_is_excluded_from_format_globs(publication, monkeypatch, filetype):
+    artifact, backend, destination, staged = publication
+    artifact.filetype = filetype
+    backend.protocol = "file"
+
+    def export(query, parameters):
+        temporary = Path(parameters[0])
+        staged.append(temporary)
+        temporary.write_bytes(b"unfinished output")
+        assert temporary.suffix == ".tmp"
+        assert temporary not in destination.parent.rglob(f"*.{filetype}")
+        assert f"FORMAT {filetype}" in query
+
+    monkeypatch.setattr(data_artifact.duckdb, "execute", export)
+    assert await artifact.persist()
+    assert not staged[0].exists()

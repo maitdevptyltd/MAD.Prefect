@@ -21,6 +21,8 @@ checks two successive publications while reading the input and output via `mad:/
 
 Temporary files are removed after success or failure. Failed writes propagate
 their error and do not mark the artifact as persisted or release its data.
+The temporary file ends in `.tmp`, with its format supplied explicitly to DuckDB,
+so recursive `*.parquet`, `*.csv` and `*.json` searches exclude unfinished output.
 
 ## Progress
 

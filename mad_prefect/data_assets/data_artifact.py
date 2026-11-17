@@ -84,10 +84,13 @@ class DataArtifact:
 
             # Local staging avoids DuckDB's mad:// overwrite bug and remote delete-before-copy failure (see docs/data-asset-publication.md).
             with TemporaryDirectory(dir=temporary_parent) as temporary_directory:
-                # Finish the file here first; the temporary directory is cleaned up automatically.
-                temporary_file = Path(temporary_directory) / f"data.{self.filetype}"
+                # Use .tmp so format-specific file searches cannot read unfinished output.
+                temporary_file = Path(temporary_directory) / "data.tmp"
                 _relation = self.data
-                duckdb.execute("COPY _relation TO ?", [temporary_file.as_posix()])
+                duckdb.execute(
+                    f"COPY _relation TO ? (FORMAT {self.filetype})",
+                    [temporary_file.as_posix()],
+                )
 
                 if destination_is_local:
                     # Replace the local file in one operation, without deleting it first.
