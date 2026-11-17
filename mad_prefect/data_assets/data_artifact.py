@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import BinaryIO, Sequence, cast, Any
 import duckdb
 import httpx
@@ -10,7 +12,7 @@ from pydantic import TypeAdapter
 from mad_prefect.data_assets import ARTIFACT_FILE_TYPES
 from mad_prefect.data_assets.options import ReadCSVOptions, ReadJsonOptions
 from mad_prefect.data_assets.utils import safe_truthy, yield_data_batches
-from mad_prefect.duckdb import register_mad_protocol, register_fsspec_filesystem
+from mad_prefect.duckdb import register_mad_protocol
 from mad_prefect.filesystems import get_fs
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -62,9 +64,6 @@ class DataArtifact:
         # duckdb.query("SET preserve_insertion_order = false;")
 
         if isinstance(self.data, duckdb.DuckDBPyRelation):
-            # There is a bug with fsspec and duckdb see test: test_overwriting_existing_file
-            # to work around the bug, instead of setting (use_tmp_file 0) in the query, we will directly reference
-            # the wrapped filesystem
             fs = await get_fs()
             protocol = (
                 fs._fs.protocol
@@ -72,15 +71,30 @@ class DataArtifact:
                 else fs._fs.protocol[0]
             )
 
-            # Ensure the directory for the path exists
+            # Resolve the final destination and create its parent directory.
             fs.mkdirs(os.path.dirname(self.path), exist_ok=True)
+            destination_path = fs._resolve_path(self.path)
+            # Check whether the destination protocol points to a local filesystem.
+            destination_is_local = protocol in ("file", "local")
 
-            path = fs._resolve_path(self.path)
+            # None selects the system temp directory; local replacements must stay on the destination filesystem.
+            temporary_parent = None
+            if destination_is_local:
+                temporary_parent = os.path.dirname(destination_path)
 
-            register_fsspec_filesystem(fs._fs)
-            logger.debug(f"Persisting DuckDB relation to {protocol}://{path}")
-            _d = self.data
-            duckdb.execute(f"COPY _d TO '{protocol}://{path}'")
+            # Local staging avoids DuckDB's mad:// overwrite bug and remote delete-before-copy failure (see docs/data-asset-publication.md).
+            with TemporaryDirectory(dir=temporary_parent) as temporary_directory:
+                # Finish the file here first; the temporary directory is cleaned up automatically.
+                temporary_file = Path(temporary_directory) / f"data.{self.filetype}"
+                _relation = self.data
+                duckdb.execute("COPY _relation TO ?", [temporary_file.as_posix()])
+
+                if destination_is_local:
+                    # Replace the local file in one operation, without deleting it first.
+                    os.replace(temporary_file, destination_path)
+                else:
+                    # Upload the finished file; Azure keeps the old blob until the upload commits.
+                    fs._fs.put_file(str(temporary_file), destination_path)
         else:
             if self.filetype == "json":
                 await self._persist_json()

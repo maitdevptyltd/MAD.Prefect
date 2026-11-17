@@ -104,6 +104,23 @@ async def test_overwriting_existing_file(sample_parquet):
     assert copied_count == 3
 
 
+async def test_published_relation_can_be_overwritten(sample_parquet):
+    from mad_prefect.data_assets.data_artifact import DataArtifact
+
+    # Both reads use mad://, but publication must not use its broken temporary
+    # path handling when DuckDB replaces an existing output.
+    for increment in (0, 10):
+        relation = duckdb.sql(
+            f"SELECT column0 + {increment} AS value FROM 'mad://sample1.parquet'"
+        )
+        artifact = DataArtifact("published.parquet", relation)
+        assert await artifact.persist()
+
+        assert duckdb.sql(
+            "SELECT value FROM 'mad://published.parquet' ORDER BY value"
+        ).fetchall() == [(1 + increment,), (2 + increment,), (3 + increment,)]
+
+
 def test_register_fsspec_filesystem_is_idempotent(monkeypatch, tmp_path):
     from mad_prefect import duckdb as mad_duckdb
     from mad_prefect.filesystems import FsspecFileSystem
