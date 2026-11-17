@@ -63,6 +63,13 @@ In this example, `generate_data` is defined as a data asset using the `@asset` d
 
 ---
 
+## Shared API rate limiting
+
+Use [shared API rate limits](docs/shared-api-rate-limit.md) to space requests
+across Prefect flows and Kubernetes pods. The [HTTPX integration guide](docs/http-retries.md)
+shows how to combine the limiter with your own retry library, Prefect task retries,
+or no HTTP retries.
+
 ## Table of Contents
 
 1. [Modules](#modules)
