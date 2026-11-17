@@ -28,6 +28,23 @@ including retries, acquires an allowance automatically. Other clients can call
 `acquire()` immediately before each attempt. The caller chooses its HTTP retry
 library and handles provider cooldowns such as Retry-After.
 
+## Prefect server connection
+
+The limiter requires Prefect's `PREFECT_API_URL` setting to point to the shared
+server. For worker-run deployments, the Prefect worker normally passes this
+setting into the flow's runtime; you do not need to repeat it in each deployment.
+
+For local runs, configure it before running the example, either through your
+Prefect profile or an environment variable. For example, in PowerShell:
+
+```powershell
+$env:PREFECT_API_URL = "https://your-prefect-server/api"
+```
+
+Use the same server as the other callers sharing the allowance. If the setting
+is missing, acquisition fails rather than starting a temporary local server
+that cannot coordinate limits with those callers.
+
 ## Prefect connection recovery
 
 Most callers only need the two arguments above. To change the number of attempts

@@ -12,6 +12,10 @@ async with httpx.AsyncClient(transport=paced) as client:
     response.raise_for_status()
 ```
 
+The example requires [a configured Prefect server connection](shared-api-rate-limit.md#prefect-server-connection).
+Workers normally supply `PREFECT_API_URL` for deployed flows; for local runs,
+configure it through an environment variable or Prefect profile.
+
 This client has shared rate limiting and no HTTP retries. MAD.Prefect supplies
 the allowance and the small transport adapter. Your repository chooses whether
 to retry, which failures qualify, and how long to wait.
