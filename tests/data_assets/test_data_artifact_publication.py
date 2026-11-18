@@ -29,13 +29,18 @@ def publication(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(data_artifact.duckdb, "sql", Mock(return_value=catalog))
     staged: list[Path] = []
 
-    def export(query: str, parameters: list[str]):
-        temporary = Path(parameters[0])
+    def export(query: str):
+        temporary = exported_path(query)
         staged.append(temporary)
         temporary.write_bytes(b"replacement complete output")
 
     monkeypatch.setattr(data_artifact.duckdb, "execute", export)
     return artifact, backend, destination, staged
+
+
+def exported_path(query: str) -> Path:
+    filename = query.split(" TO '", 1)[1].rsplit("' (FORMAT", 1)[0]
+    return Path(filename.replace("''", "'"))
 
 
 async def test_failed_upload_keeps_previous_output(publication):
@@ -62,8 +67,8 @@ async def test_failed_upload_keeps_previous_output(publication):
 async def test_failed_export_never_starts_upload(publication, monkeypatch):
     artifact, backend, destination, staged = publication
 
-    def fail_export(query: str, parameters: list[str]):
-        temporary = Path(parameters[0])
+    def fail_export(query: str):
+        temporary = exported_path(query)
         staged.append(temporary)
         temporary.write_bytes(b"incomplete output")
         raise OSError("export failed")
@@ -129,8 +134,8 @@ async def test_temporary_output_is_excluded_from_format_globs(publication, monke
     artifact.filetype = filetype
     backend.protocol = "file"
 
-    def export(query, parameters):
-        temporary = Path(parameters[0])
+    def export(query):
+        temporary = exported_path(query)
         staged.append(temporary)
         temporary.write_bytes(b"unfinished output")
         assert temporary.suffix == ".tmp"

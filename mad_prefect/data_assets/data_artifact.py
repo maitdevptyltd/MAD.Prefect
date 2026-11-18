@@ -65,10 +65,10 @@ class DataArtifact:
 
         if isinstance(self.data, duckdb.DuckDBPyRelation):
             # DuckDB resolves database tables before Python variables; refuse to export the wrong data.
-            collision = duckdb.sql(
-                "SELECT table_name FROM duckdb_tables() WHERE lower(table_name) = '_relation' "
-                "UNION ALL SELECT view_name FROM duckdb_views() WHERE lower(view_name) = '_relation'"
-            ).fetchone()
+            try:
+                collision = duckdb.sql("SELECT * FROM pragma_table_info('_relation')").fetchone()
+            except duckdb.CatalogException:
+                collision = None
             if collision:
                 raise ValueError(
                     "Cannot publish this relation: a DuckDB table or view named '_relation' "
@@ -98,9 +98,10 @@ class DataArtifact:
                 # Use .tmp so format-specific file searches cannot read unfinished output.
                 temporary_file = Path(temporary_directory) / "data.tmp"
                 _relation = self.data
+                # DuckDB 0.9 requires a filename literal rather than a query parameter.
+                temporary_path = temporary_file.as_posix().replace("'", "''")
                 duckdb.execute(
-                    f"COPY _relation TO ? (FORMAT {self.filetype})",
-                    [temporary_file.as_posix()],
+                    f"COPY _relation TO '{temporary_path}' (FORMAT {self.filetype})"
                 )
 
                 if destination_is_local:

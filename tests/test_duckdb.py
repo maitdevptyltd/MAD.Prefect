@@ -141,6 +141,46 @@ async def test_publication_rejects_shadowing_database_object(sample_parquet, obj
         duckdb.execute(f"DROP {object_type} {name}")
 
 
+@pytest.mark.parametrize("object_type", ["TABLE", "VIEW"])
+@pytest.mark.parametrize("search_path", ["off_path", "search_path", "current_schema"])
+async def test_publication_checks_only_visible_objects(sample_parquet, object_type, search_path):
+    from mad_prefect.data_assets.data_artifact import DataArtifact
+
+    original_setting = duckdb.sql("SELECT current_setting('search_path')").fetchone()
+    assert original_setting is not None
+    original_search_path = original_setting[0]
+    duckdb.execute("CREATE SCHEMA publication_archive")
+    duckdb.execute(f"CREATE {object_type} publication_archive._relation AS SELECT 99 AS value")
+    try:
+        if search_path == "search_path":
+            duckdb.execute("SET search_path = 'publication_archive,main'")
+        elif search_path == "current_schema":
+            duckdb.execute("SET schema = 'publication_archive'")
+
+        artifact = DataArtifact("published.parquet", duckdb.sql("SELECT 42 AS value"))
+        if search_path == "off_path":
+            assert await artifact.persist()
+            assert duckdb.read_parquet(str(sample_parquet / "published.parquet")).fetchall() == [(42,)]
+        else:
+            with pytest.raises(ValueError, match="would override the supplied data"):
+                await artifact.persist()
+    finally:
+        duckdb.execute("SET search_path = ?", [original_search_path])
+        duckdb.execute("DROP SCHEMA publication_archive CASCADE")
+
+
+@pytest.mark.parametrize("filetype", ["parquet", "csv", "json"])
+async def test_publication_escapes_quotes_in_staging_path(sample_parquet, filetype):
+    from mad_prefect.data_assets.data_artifact import DataArtifact
+
+    path = f"quoted'folder/published.{filetype}"
+    artifact = DataArtifact(path, duckdb.sql("SELECT 42 AS value"))
+    assert await artifact.persist()
+    assert duckdb.sql(
+        f"SELECT * FROM read_{filetype}(?)", params=[str(sample_parquet / path)]
+    ).fetchall() == [(42,)]
+
+
 def test_register_fsspec_filesystem_is_idempotent(monkeypatch, tmp_path):
     from mad_prefect import duckdb as mad_duckdb
     from mad_prefect.filesystems import FsspecFileSystem

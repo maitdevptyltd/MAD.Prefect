@@ -32,10 +32,11 @@ so recursive `*.parquet`, `*.csv` and `*.json` searches exclude unfinished outpu
 
 ## Progress
 
-- Publication refuses an existing DuckDB table or view named `_relation`
+- Publication refuses a DuckDB table or view named `_relation` visible on the current search path
   (case-insensitive), which would otherwise override the supplied Python relation.
   Rename the conflicting object before retrying; publication leaves any existing output intact.
 - Relation publication stages a complete file before replacing the output.
+- COPY uses an escaped filename literal for compatibility with DuckDB 0.9.
 - Focused tests cover export failure, upload failure, local replacement failure,
   successful replacement and temporary-file cleanup.
 
