@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import BinaryIO, Sequence, cast, Any
 import duckdb
 import httpx
@@ -62,9 +64,17 @@ class DataArtifact:
         # duckdb.query("SET preserve_insertion_order = false;")
 
         if isinstance(self.data, duckdb.DuckDBPyRelation):
-            # There is a bug with fsspec and duckdb see test: test_overwriting_existing_file
-            # to work around the bug, instead of setting (use_tmp_file 0) in the query, we will directly reference
-            # the wrapped filesystem
+            # DuckDB resolves database tables before Python variables; refuse to export the wrong data.
+            try:
+                collision = duckdb.sql("SELECT * FROM pragma_table_info('_d')").fetchone()
+            except duckdb.CatalogException:
+                collision = None
+            if collision:
+                raise ValueError(
+                    "Cannot publish this relation: a DuckDB table or view named '_d' "
+                    "would override the supplied data. Rename that table or view before publishing."
+                )
+
             fs = await get_fs()
             protocol = (
                 fs._fs.protocol
@@ -72,15 +82,41 @@ class DataArtifact:
                 else fs._fs.protocol[0]
             )
 
-            # Ensure the directory for the path exists
+            # Resolve the final destination and create its parent directory.
             fs.mkdirs(os.path.dirname(self.path), exist_ok=True)
+            destination_path = fs._resolve_path(self.path)
+            # Check whether the destination protocol points to a local filesystem.
+            destination_is_local = protocol in ("file", "local")
 
-            path = fs._resolve_path(self.path)
+            if not destination_is_local and protocol not in ("abfs", "abfss", "az"):
+                # Keep DuckDB's existing remote write process for non-Azure storage.
+                register_fsspec_filesystem(fs._fs)
+                remote_path = f"{protocol}://{destination_path}".replace("'", "''")
+                _d = self.data
+                duckdb.execute(f"COPY _d TO '{remote_path}' (FORMAT {self.filetype})")
+            else:
+                # None selects the system temp directory; local replacements must stay on the destination filesystem.
+                temporary_parent = None
+                if destination_is_local:
+                    temporary_parent = os.path.dirname(destination_path)
 
-            register_fsspec_filesystem(fs._fs)
-            logger.debug(f"Persisting DuckDB relation to {protocol}://{path}")
-            _d = self.data
-            duckdb.execute(f"COPY _d TO '{protocol}://{path}'")
+                # Local staging avoids DuckDB's mad:// overwrite bug and remote delete-before-copy failure (see docs/data-asset-publication.md).
+                with TemporaryDirectory(dir=temporary_parent) as temporary_directory:
+                    # Use .tmp so format-specific file searches cannot read unfinished output.
+                    temporary_file = Path(temporary_directory) / "data.tmp"
+                    _d = self.data
+                    # DuckDB 0.9 requires a filename literal rather than a query parameter.
+                    temporary_path = temporary_file.as_posix().replace("'", "''")
+                    duckdb.execute(
+                        f"COPY _d TO '{temporary_path}' (FORMAT {self.filetype})"
+                    )
+
+                    if destination_is_local:
+                        # Replace the local file in one operation, without deleting it first.
+                        os.replace(temporary_file, destination_path)
+                    else:
+                        # Upload the finished file; Azure keeps the old blob until the upload commits.
+                        fs._fs.put_file(str(temporary_file), destination_path)
         else:
             if self.filetype == "json":
                 await self._persist_json()
