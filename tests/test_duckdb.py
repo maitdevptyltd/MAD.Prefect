@@ -122,7 +122,7 @@ async def test_published_relation_can_be_overwritten(sample_parquet):
 
 
 @pytest.mark.parametrize("object_type", ["TABLE", "VIEW"])
-@pytest.mark.parametrize("name", ["_relation", "_RELATION"])
+@pytest.mark.parametrize("name", ["_d", "_D"])
 async def test_publication_rejects_shadowing_database_object(sample_parquet, object_type, name):
     from mad_prefect.data_assets.data_artifact import DataArtifact
 
@@ -150,7 +150,7 @@ async def test_publication_checks_only_visible_objects(sample_parquet, object_ty
     assert original_setting is not None
     original_search_path = original_setting[0]
     duckdb.execute("CREATE SCHEMA publication_archive")
-    duckdb.execute(f"CREATE {object_type} publication_archive._relation AS SELECT 99 AS value")
+    duckdb.execute(f"CREATE {object_type} publication_archive._d AS SELECT 99 AS value")
     try:
         if search_path == "search_path":
             duckdb.execute("SET search_path = 'publication_archive,main'")
@@ -167,6 +167,23 @@ async def test_publication_checks_only_visible_objects(sample_parquet, object_ty
     finally:
         duckdb.execute("SET search_path = ?", [original_search_path])
         duckdb.execute("DROP SCHEMA publication_archive CASCADE")
+
+
+@pytest.mark.parametrize("object_type", ["TABLE", "VIEW"])
+@pytest.mark.parametrize("protocol", ["file", "abfs"])
+async def test_publication_allows_existing_relation_object(sample_parquet, monkeypatch, object_type, protocol):
+    from mad_prefect.data_assets.data_artifact import DataArtifact
+
+    filesystem = await mad_filesystems.get_fs()
+    monkeypatch.setattr(filesystem._fs, "protocol", protocol)
+    duckdb.execute(f"CREATE {object_type} _relation AS SELECT 99 AS value")
+    try:
+        artifact = DataArtifact("published.parquet", duckdb.sql("SELECT 42 AS value"))
+        assert await artifact.persist()
+        assert duckdb.read_parquet(str(sample_parquet / "published.parquet")).fetchall() == [(42,)]
+        assert duckdb.sql("SELECT * FROM _relation").fetchall() == [(99,)]
+    finally:
+        duckdb.execute(f"DROP {object_type} _relation")
 
 
 @pytest.mark.parametrize("filetype", ["parquet", "csv", "json"])

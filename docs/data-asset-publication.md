@@ -6,12 +6,15 @@ async def logs():
     return duckdb.sql("SELECT * FROM 'mad://bronze/partitions/*.parquet'")
 ```
 
-DuckDB relation results are written completely to a temporary local file before
-replacing the published file. A failed query or serialization during publication
-leaves the existing output untouched. Local outputs use `os.replace` on the same filesystem. Remote
-outputs use the configured filesystem's `put_file` without deleting the old file
-first. Azure's block-blob upload commits the replacement after uploading its
-blocks, avoiding DuckDB's delete-then-copy replacement.
+For local and Azure Blob Storage destinations, DuckDB relation results are written
+completely to a temporary local file before replacing the published file. A failed
+query or serialization during publication leaves the existing output untouched.
+Local outputs use `os.replace` on the same filesystem. Azure protocols `abfs`,
+`abfss` and `az` use `put_file`: the block-blob upload commits the replacement after
+uploading its blocks, avoiding DuckDB's delete-then-copy replacement.
+
+Other remote destinations, including SSH/SFTP, keep the previous DuckDB write
+process through their registered filesystem. They do not use the new direct upload.
 
 This protection starts at publication. With `snapshot_artifacts=False`, asset
 execution first deletes its artifact directory recursively. Keep the published
@@ -25,17 +28,18 @@ publisher bypassed that wrapper using the underlying filesystem protocol;
 local staging bypasses it too. `test_published_relation_can_be_overwritten`
 checks two successive publications while reading the input and output via `mad://`.
 
-Temporary files are removed after success or failure. Failed writes propagate
+Local staging files are removed after success or failure. Failed writes propagate
 their error and do not mark the artifact as persisted or release its data.
 The temporary file ends in `.tmp`, with its format supplied explicitly to DuckDB,
 so recursive `*.parquet`, `*.csv` and `*.json` searches exclude unfinished output.
 
 ## Progress
 
-- Publication refuses a DuckDB table or view named `_relation` visible on the current search path
+- Publication refuses a DuckDB table or view named `_d` visible on the current search path
   (case-insensitive), which would otherwise override the supplied Python relation.
   Rename the conflicting object before retrying; publication leaves any existing output intact.
-- Relation publication stages a complete file before replacing the output.
+- Local and Azure publication stage a complete file before replacing the output.
+- The original `_d` relation name is retained; an existing `_relation` table or view does not block publication.
 - COPY uses an escaped filename literal for compatibility with DuckDB 0.9.
 - Focused tests cover export failure, upload failure, local replacement failure,
   successful replacement and temporary-file cleanup.
@@ -60,7 +64,7 @@ does not establish production performance or every storage provider's behaviour.
 
 ## Blockers & Risks
 
-- One complete output file must fit on temporary disk; local replacement stages
+- For local and Azure destinations, one complete output file must fit on temporary disk; local replacement stages
   beside its destination so it stays on the same filesystem.
 - Remote overwrite guarantees belong to the storage driver: this is not a
   cross-provider atomicity guarantee or a concurrent-writer lock.

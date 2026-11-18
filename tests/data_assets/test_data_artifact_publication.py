@@ -83,8 +83,10 @@ async def test_failed_export_never_starts_upload(publication, monkeypatch):
     backend.put_file.assert_not_called()
 
 
-async def test_successful_upload_replaces_output(publication):
+@pytest.mark.parametrize("protocol", ["abfs", "abfss", "az"])
+async def test_successful_upload_replaces_output(publication, protocol):
     artifact, backend, destination, staged = publication
+    backend.protocol = protocol
     backend.put_file.side_effect = lambda source, target: Path(target).write_bytes(
         Path(source).read_bytes()
     )
@@ -145,3 +147,28 @@ async def test_temporary_output_is_excluded_from_format_globs(publication, monke
     monkeypatch.setattr(data_artifact.duckdb, "execute", export)
     assert await artifact.persist()
     assert not staged[0].exists()
+
+
+@pytest.mark.parametrize("protocol", ["ssh", "sftp", "s3", "memory", "adl"])
+@pytest.mark.parametrize("fail", [False, True])
+async def test_other_remote_storage_keeps_duckdb_export(publication, monkeypatch, protocol, fail):
+    artifact, backend, destination, staged = publication
+    backend.protocol = protocol
+    register = Mock()
+    export = Mock(side_effect=OSError("remote export failed") if fail else None)
+    monkeypatch.setattr(data_artifact, "register_fsspec_filesystem", register)
+    monkeypatch.setattr(data_artifact.duckdb, "execute", export)
+
+    if fail:
+        with pytest.raises(OSError, match="remote export failed"):
+            await artifact.persist()
+        assert artifact.data is not None
+        assert not artifact.persisted
+    else:
+        assert await artifact.persist()
+
+    register.assert_called_once_with(backend)
+    escaped_path = f"{protocol}://{destination}".replace("'", "''")
+    export.assert_called_once_with(f"COPY _d TO '{escaped_path}' (FORMAT parquet)")
+    backend.put_file.assert_not_called()
+    assert not staged
